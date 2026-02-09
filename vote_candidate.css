@@ -1,0 +1,253 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* BACK BUTTON */
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    color: #667eea;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    margin-bottom: 24px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.back-btn:hover {
+    transform: translateX(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* HEADER CARD */
+.header-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+}
+
+.header-card h1 {
+    font-size: 28px;
+    color: #1a202c;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-card .description {
+    color: #4a5568;
+    font-size: 16px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.date-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f7fafc;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+}
+
+/* ALERT MESSAGES */
+.alert {
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.alert-success {
+    background: #d1fae5;
+    border: 2px solid #10b981;
+    color: #065f46;
+}
+
+.alert-voted {
+    background: #dbeafe;
+    border: 2px solid #3b82f6;
+    color: #1e40af;
+}
+
+.alert-error {
+    background: #fee2e2;
+    border: 2px solid #ef4444;
+    color: #991b1b;
+}
+
+.alert-icon {
+    font-size: 24px;
+}
+
+.voted-info {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    border: 2px solid #3b82f6;
+}
+
+.voted-info strong {
+    color: #1e40af;
+    font-size: 16px;
+}
+
+.voted-info p {
+    margin-top: 8px;
+    color: #4a5568;
+}
+
+/* CANDIDATES CARD */
+.candidates-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+}
+
+.candidates-card h2 {
+    font-size: 20px;
+    color: #1a202c;
+    margin-bottom: 24px;
+}
+
+.candidate-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    transition: all 0.3s;
+}
+
+.candidate-item:last-child {
+    margin-bottom: 0;
+}
+
+.candidate-item:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+    transform: translateX(4px);
+}
+
+.candidate-item.voted {
+    background: #dbeafe;
+    border-color: #3b82f6;
+}
+
+.candidate-name {
+    font-size: 18px;
+    font-weight: 500;
+    color: #1a202c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.voted-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vote-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.vote-btn:hover {
+    background: #5568d3;
+    transform: scale(1.05);
+}
+
+.vote-btn:disabled {
+    background: #cbd5e0;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* NO CANDIDATES */
+.no-candidates {
+    text-align: center;
+    padding: 40px;
+    color: #718096;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    body {
+        padding: 12px;
+    }
+
+    .header-card {
+        padding: 24px;
+    }
+
+    .header-card h1 {
+        font-size: 24px;
+    }
+
+    .candidates-card {
+        padding: 24px;
+    }
+
+    .candidate-item {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+
+    .vote-btn {
+        width: 100%;
+    }
+}
