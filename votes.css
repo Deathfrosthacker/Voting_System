@@ -168,6 +168,20 @@ td em {
     font-size: 0.9rem;
 }
 
+
+/* =====================
+   ANONYMOUS VOTER LIST
+===================== */
+td ul li {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+td ul li strong {
+    color: #475569;
+    font-weight: 500;
+}
+
 /* =====================
    RESPONSIVE DESIGN
 ===================== */

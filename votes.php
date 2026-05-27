@@ -36,7 +36,7 @@ $positions = mysqli_query($conn, "
 
 <div class="main">
     <h2>📊 Votes Overview</h2>
-    <p style="color:#6b7280;">Total votes and voters per position</p>
+    <p style="color:#6b7280;">Total votes and vote timestamps per position (voter identities protected)</p>
 
     <?php while ($pos = mysqli_fetch_assoc($positions)): ?>
 
@@ -73,11 +73,10 @@ $positions = mysqli_query($conn, "
                 <?php while ($cand = mysqli_fetch_assoc($candidates)): ?>
 
                     <?php
-                    // Fetch voters for this candidate
+                    // Fetch anonymous vote timestamps for this candidate
                     $voters = mysqli_query($conn, "
-                        SELECT u.name, u.student_id, v.vote_time
+                        SELECT v.vote_time
                         FROM votes v
-                        JOIN users u ON v.user_id = u.id
                         WHERE v.candidate_id = {$cand['id']}
                         ORDER BY v.vote_time DESC
                     ");
@@ -93,8 +92,7 @@ $positions = mysqli_query($conn, "
                                 <ul style="margin:0;padding-left:18px;">
                                     <?php while ($v = mysqli_fetch_assoc($voters)): ?>
                                         <li>
-                                            <?php echo $v['name']; ?>
-                                            (<?php echo $v['student_id']; ?>)
+                                            Anonymous Voter — <?php echo date('M d, Y 	 g:i A', strtotime($v['vote_time'])); ?>
                                         </li>
                                     <?php endwhile; ?>
                                 </ul>

@@ -68,7 +68,7 @@ if (isset($_POST['update_position'])) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="positions.css">
+    <link rel="stylesheet" href="positions2.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Position - VoteSystem</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -89,8 +89,8 @@ if (isset($_POST['update_position'])) {
 
         <!-- Edit Position Form -->
         <div class="card">
-            <h3>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <h3 style="display: inline-flex; align-items: center; gap: 10px;">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 24px; height: 24px; flex-shrink: 0;">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
                 Edit Position Details
@@ -126,8 +126,8 @@ if (isset($_POST['update_position'])) {
                 </div>
 
                 <div style="display: flex; gap: 12px;">
-                    <button type="submit" name="update_position">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button type="submit" name="update_position" style="display: inline-flex; align-items: center; gap: 8px;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px; flex-shrink: 0;">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
                         Update Position

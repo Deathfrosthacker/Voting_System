@@ -275,11 +275,14 @@ function confirmDelete(id, positionName) {
     display: flex;
     gap: 8px;
     justify-content: center;
+    align-items: center;
 }
 
 .btn-edit,
 .btn-delete {
-    padding: 6px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -287,6 +290,10 @@ function confirmDelete(id, positionName) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    flex-grow: 0;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .btn-edit {
@@ -314,6 +321,14 @@ function confirmDelete(id, positionName) {
 .btn-delete svg {
     width: 18px;
     height: 18px;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+/* Prevent table cell expansion */
+table td:last-child {
+    width: 1%;
+    white-space: nowrap;
 }
 </style>
 

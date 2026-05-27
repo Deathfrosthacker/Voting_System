@@ -1,12 +1,21 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./auto_declare.php";
 
 /* Simple admin protection */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: login.php");
     exit();
 }
+
+$resultsQuery = "
+    SELECT position_name, winner_name, total_votes, end_date
+    FROM election_results
+    ORDER BY declared_at DESC
+    LIMIT 3
+";
+$resultsResult = mysqli_query($conn, $resultsQuery);
 
 $logsQuery = "
     SELECT logs.activity, logs.log_time, users.name, users.student_id
@@ -501,6 +510,50 @@ $latestCandidate = mysqli_query(
             <?php else: ?>
                 <p class="no-data">No candidate added yet</p>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- ELECTION RESULTS SECTION -->
+    <div class="logs-section" style="margin-bottom: 30px;">
+        <h2>
+            <i class="fas fa-trophy"></i>
+            Recent Election Results
+        </h2>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th><i class="fas fa-briefcase"></i> Position</th>
+                        <th><i class="fas fa-crown"></i> Winner</th>
+                        <th><i class="fas fa-vote-yea"></i> Votes</th>
+                        <th><i class="fas fa-calendar-alt"></i> Ended On</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (mysqli_num_rows($resultsResult) > 0): ?>
+                        <?php while ($res = mysqli_fetch_assoc($resultsResult)): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($res['position_name']); ?></strong></td>
+                            <td>
+                                <span class="badge badge-success">
+                                    <?php echo htmlspecialchars($res['winner_name']); ?>
+                                </span>
+                            </td>
+                            <td class="count" style="font-size: 18px; color: #667eea;"><?php echo $res['total_votes']; ?></td>
+                            <td><?php echo date('M d, Y', strtotime($res['end_date'])); ?></td>
+                        </tr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: #94a3b8; padding: 40px;">
+                                <i class="fas fa-hourglass-half" style="font-size: 48px; margin-bottom: 10px; display: block;"></i>
+                                No elections have ended yet. Results will appear automatically.
+                            </td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 

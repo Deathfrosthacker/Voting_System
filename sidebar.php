@@ -257,6 +257,13 @@
             </svg>
             <span>Add Admin</span>
         </a>
+
+        <a href="./winners.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'winners.php' ? 'active' : ''; ?>">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2L12.5 7H17.5L13.5 10.5L15 16L10 13L5 16L6.5 10.5L2.5 7H7.5L10 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+            <span>Results</span>
+        </a>
     </nav>
 
     <div class="sidebar-footer">
