@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -31,35 +32,36 @@ $position = mysqli_fetch_assoc($result);
    HANDLE UPDATE POSITION
 ========================= */
 if (isset($_POST['update_position'])) {
-
-    $name = mysqli_real_escape_string($conn, $_POST['position_name']);
-    $description = mysqli_real_escape_string($conn, $_POST['description']);
-    $start = $_POST['start_date'];
-    $end = $_POST['end_date'];
-
-    $sql = "UPDATE positions 
-            SET position_name = '$name', 
-                description = '$description', 
-                start_date = '$start', 
-                end_date = '$end'
-            WHERE id = '$position_id'";
-
-    if (mysqli_query($conn, $sql)) {
-
-        // LOG ACTIVITY
-        $user_id = $_SESSION['user_id'];
-        $activity = "Updated Position: " . $name;
-
-        $log_sql = "INSERT INTO logs (user_id, activity, log_time)
-                    VALUES ('$user_id', '$activity', NOW())";
-
-        mysqli_query($conn, $log_sql);
-
-        header("Location: positions.php?status=updated");
-        exit();
-
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        $error_message = "Invalid CSRF token. Please try again.";
     } else {
-        $error_message = "Error updating position. Please try again.";
+        $name = mysqli_real_escape_string($conn, $_POST['position_name']);
+        $description = mysqli_real_escape_string($conn, $_POST['description']);
+        $start = $_POST['start_date'];
+        $end = $_POST['end_date'];
+
+        $sql = "UPDATE positions 
+                SET position_name = '$name', 
+                    description = '$description', 
+                    start_date = '$start', 
+                    end_date = '$end'
+                WHERE id = '$position_id'";
+
+        if (mysqli_query($conn, $sql)) {
+            // LOG ACTIVITY
+            $user_id = $_SESSION['user_id'];
+            $activity = "Updated Position: " . $name;
+
+            $log_sql = "INSERT INTO logs (user_id, activity, log_time)
+                        VALUES ('$user_id', '$activity', NOW())";
+
+            mysqli_query($conn, $log_sql);
+
+            header("Location: positions.php?status=updated");
+            exit();
+        } else {
+            $error_message = "Error updating position. Please try again.";
+        }
     }
 }
 ?>
@@ -89,8 +91,8 @@ if (isset($_POST['update_position'])) {
 
         <!-- Edit Position Form -->
         <div class="card">
-            <h3 style="display: inline-flex; align-items: center; gap: 10px;">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 24px; height: 24px; flex-shrink: 0;">
+            <h3>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
                 Edit Position Details
@@ -103,6 +105,7 @@ if (isset($_POST['update_position'])) {
             <?php endif; ?>
 
             <form method="POST">
+                <?php echo csrf_input_field(); ?>
                 <div class="form-group">
                     <label for="position_name">Position Name <span>*</span></label>
                     <input type="text" id="position_name" name="position_name" value="<?= htmlspecialchars($position['position_name']) ?>" placeholder="e.g., President, Vice President, Secretary" required>
@@ -126,8 +129,8 @@ if (isset($_POST['update_position'])) {
                 </div>
 
                 <div style="display: flex; gap: 12px;">
-                    <button type="submit" name="update_position" style="display: inline-flex; align-items: center; gap: 8px;">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px; flex-shrink: 0;">
+                    <button type="submit" name="update_position">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
                         Update Position

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./csrf_helper.php";
 
 /* =========================
    AUTH PROTECTION

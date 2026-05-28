@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./csrf_helper.php";
 
 // Security
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
