@@ -22,6 +22,12 @@ $positions = mysqli_query(
 
 // Handle candidate insert
 if (isset($_POST['add_candidate'])) {
+    // ✅ ADDED: CSRF validation
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        header("Location: add_candidate.php?status=csrf_error");
+        exit();
+    }
+
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
     $position       = $_POST['position_name'];
     $start_date     = $_POST['start_date'];
@@ -39,7 +45,7 @@ if (isset($_POST['add_candidate'])) {
 
         mysqli_query(
             $conn,
-            "INSERT INTO logs (id, activity, log_time)
+            "INSERT INTO logs (user_id, activity, log_time)
              VALUES ('$user_id', '$activity', NOW())"
         );
 
@@ -86,7 +92,7 @@ if (isset($_POST['add_candidate'])) {
                         <p class="description"><?php echo htmlspecialchars($pos['description']); ?></p>
                         <div class="position-dates">
                             <div class="date-item">
-                              
+
                                 <span>Start: <?php echo date('M d, Y', strtotime($pos['start_date'])); ?></span>
                             </div>
                             <div class="date-item">
@@ -102,6 +108,9 @@ if (isset($_POST['add_candidate'])) {
         <div class="form-box" id="candidateForm">
             <h3 id="formTitle">Add Candidate</h3>
             <form method="POST">
+                <!-- ✅ ADDED: CSRF token field -->
+                <?php echo csrf_input_field(); ?>
+
                 <input type="hidden" name="position_name" id="position_name">
                 <input type="hidden" name="start_date" id="start_date">
                 <input type="hidden" name="end_date" id="end_date">
@@ -152,12 +161,12 @@ function openForm(position, start, end) {
     const form = document.getElementById("candidateForm");
     form.classList.add('active');
     form.style.display = "block";
-    
+
     document.getElementById("formTitle").innerText = "Add Candidate for " + position;
     document.getElementById("position_name").value = position;
     document.getElementById("start_date").value = start;
     document.getElementById("end_date").value = end;
-    
+
     // Scroll to form smoothly
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -174,6 +183,13 @@ function openForm(position, start, end) {
         timer: 2000
     }).then(() => {
         window.location.href = "add_candidate.php";
+    });
+<?php elseif ($status === "csrf_error"): ?>  <!-- ✅ ADDED: CSRF error handler -->
+    Swal.fire({
+        icon: 'error',
+        title: 'Security Error!',
+        text: 'Invalid CSRF token. Please refresh and try again.',
+        confirmButtonColor: '#ef4444'
     });
 <?php else: ?>
     Swal.fire({

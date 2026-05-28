@@ -1,4 +1,8 @@
 <?php
+// ✅ FIXED: Only start session if not already active
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once "./config/connection.php";
 
 /* =========================

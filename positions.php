@@ -14,6 +14,12 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 ========================= */
 if (isset($_POST['add_position'])) {
 
+    // ✅ ADDED: CSRF validation
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        header("Location: positions.php?status=csrf_error");
+        exit();
+    }
+
     $name  = mysqli_real_escape_string($conn, $_POST['position_name']);
     $description  = mysqli_real_escape_string($conn, $_POST['description']);
     $start = $_POST['start_date'];
@@ -59,7 +65,7 @@ $positions = mysqli_query(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Positions - VoteSystem</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
+
 
 </head>
 
@@ -93,13 +99,16 @@ $positions = mysqli_query(
                 </svg>
                 Add New Position
             </h3>
-            
+
 
 
 
 
 
             <form method="POST">
+                <!-- ✅ ADDED: CSRF token field -->
+                <?php echo csrf_input_field(); ?>
+
                 <div class="form-group">
                     <label for="position_name">Position Name <span>*</span></label>
                     <input type="text" id="position_name" name="position_name" placeholder="e.g., President, Vice President, Secretary" required>
@@ -264,6 +273,15 @@ function confirmDelete(id, positionName) {
         text: 'Position has been deleted successfully',
         confirmButtonColor: '#2563eb',
         timer: 2000
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "csrf_error"): ?>  <!-- ✅ ADDED: CSRF error handler -->
+    Swal.fire({
+        icon: 'error',
+        title: 'Security Error!',
+        text: 'Invalid CSRF token. Please refresh and try again.',
+        confirmButtonColor: '#ef4444'
     }).then(() => {
         window.history.replaceState({}, document.title, 'positions.php');
     });

@@ -1,4 +1,4 @@
-    <?php
+   <?php
     session_start();
     require_once "./config/connection.php";
 
@@ -18,6 +18,9 @@
             // Verify password
             if (password_verify($password, $user['password'])) {
 
+                // ✅ ADDED: Regenerate session ID to prevent session fixation
+                session_regenerate_id(true);
+
                 // Set session variables
                 $_SESSION['user_id']    = $user['id'];
                 $_SESSION['student_id'] = $user['student_id'];
@@ -33,7 +36,6 @@
                 $conn,
                 "INSERT INTO logs (user_id, activity) VALUES ('$user_id', '$activity')"
             );
-
 
 
             } else {
