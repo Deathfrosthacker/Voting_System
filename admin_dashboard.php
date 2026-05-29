@@ -18,7 +18,7 @@ $resultsQuery = "
 $resultsResult = mysqli_query($conn, $resultsQuery);
 
 $logsQuery = "
-    SELECT logs.activity, logs.log_time, users.name, users.student_id
+    SELECT logs.activity, logs.log_time, users.name, users.id_number
     FROM logs
     JOIN users ON logs.user_id = users.id
     ORDER BY logs.log_time DESC
@@ -26,6 +26,10 @@ $logsQuery = "
 ";
 $logsResult = mysqli_query($conn, $logsQuery);
 
+// ✅ ADDED: Error handling for logs query
+if ($logsResult === false) {
+    $logsError = "Error fetching logs: " . mysqli_error($conn);
+}
 
 /* Fetch statistics */
 $totalUsers = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions"))['total'];
@@ -67,7 +71,7 @@ $latestCandidate = mysqli_query(
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-         
+
             min-height: 100vh;
         }
 
@@ -279,7 +283,6 @@ $latestCandidate = mysqli_query(
             padding: 30px;
             border-radius: 15px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
         }
 
         .logs-section h2 {
@@ -394,11 +397,11 @@ $latestCandidate = mysqli_query(
         }
 
         /* ANIMATIONS */
-       
 
-        
 
-      
+
+
+
     </style>
 </head>
 <body>
@@ -467,7 +470,7 @@ $latestCandidate = mysqli_query(
 
             <?php if (mysqli_num_rows($latestPosition) > 0): 
                 $pos = mysqli_fetch_assoc($latestPosition); ?>
-                
+
                 <div class="info-title">
                     <?php echo htmlspecialchars($pos['position_name']); ?>
                 </div>
@@ -564,21 +567,27 @@ $latestCandidate = mysqli_query(
             Recent Activity Logs
         </h2>
 
+        <?php if (isset($logsError)): ?>
+            <div style="background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                <?php echo htmlspecialchars($logsError); ?>
+            </div>
+        <?php endif; ?>
+
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th><i class="fas fa-id-card"></i> Student ID</th>
+                        <th><i class="fas fa-id-card"></i> ID Number</th>
                         <th><i class="fas fa-user"></i> Name</th>
                         <th><i class="fas fa-tasks"></i> Activity</th>
                         <th><i class="fas fa-clock"></i> Time</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (mysqli_num_rows($logsResult) > 0): ?>
+                    <?php if ($logsResult && mysqli_num_rows($logsResult) > 0): ?>
                         <?php while ($log = mysqli_fetch_assoc($logsResult)): ?>
                         <tr>
-                            <td><strong><?php echo htmlspecialchars($log['student_id']); ?></strong></td>
+                            <td><strong><?php echo htmlspecialchars($log['id_number']); ?></strong></td>
                             <td><?php echo htmlspecialchars($log['name']); ?></td>
                             <td>
                                 <span class="badge badge-info">

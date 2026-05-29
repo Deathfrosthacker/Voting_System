@@ -175,7 +175,7 @@
 
         <form action="logindb.php" method="POST">
             <div class="form-group">
-                <label>ID</label>
+                <label>ID Number</label>
                 <input type="number" name="id" required>
             </div>
 

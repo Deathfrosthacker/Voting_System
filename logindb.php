@@ -1,17 +1,21 @@
-   <?php
+<?php
     session_start();
     require_once "./config/connection.php";
 
     if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
-        $student_id = mysqli_real_escape_string($conn, $_POST['id']);
+        $id_number = mysqli_real_escape_string($conn, $_POST['id']);
         $password   = $_POST['password'];
 
-        // Fetch user by student_id
-        $query = "SELECT * FROM users WHERE student_id = '$student_id' LIMIT 1";
+        // Fetch user by id_number
+        $query = "SELECT * FROM users WHERE id_number = '$id_number' LIMIT 1";
         $result = mysqli_query($conn, $query);
 
-        if (mysqli_num_rows($result) == 1) {
+        // ✅ ADDED: Error handling if query fails
+        if ($result === false) {
+            $status = "db_error";
+            $error_detail = mysqli_error($conn);
+        } elseif (mysqli_num_rows($result) == 1) {
 
             $user = mysqli_fetch_assoc($result);
 
@@ -23,20 +27,19 @@
 
                 // Set session variables
                 $_SESSION['user_id']    = $user['id'];
-                $_SESSION['student_id'] = $user['student_id'];
+                $_SESSION['id_number']  = $user['id_number'];  // ✅ CHANGED: student_id → id_number
                 $_SESSION['role']       = $user['role'];
 
                 $status = "success";
                 $role   = $user['role'];
 
-            $user_id = $user['id'];
-            $activity = "Logged in";
+                $user_id = $user['id'];
+                $activity = "Logged in";
 
-            mysqli_query(
-                $conn,
-                "INSERT INTO logs (user_id, activity) VALUES ('$user_id', '$activity')"
-            );
-
+                mysqli_query(
+                    $conn,
+                    "INSERT INTO logs (user_id, activity) VALUES ('$user_id', '$activity')"
+                );
 
             } else {
                 $status = "wrong_password";
@@ -84,9 +87,19 @@
     <?php elseif ($status === "not_found"): ?>
         Swal.fire({
             icon: 'warning',
-            title: 'Student ID Not Found',
-            text: 'Please check your Student ID',
+            title: 'ID Number Not Found',  // ✅ CHANGED: Student ID → ID Number
+            text: 'Please check your ID Number',
             confirmButtonColor: '#f59e0b'
+        }).then(() => {
+            window.history.back();
+        });
+
+    <?php elseif ($status === "db_error"): ?>
+        Swal.fire({
+            icon: 'error',
+            title: 'Database Error',
+            text: '<?php echo addslashes($error_detail); ?>',
+            confirmButtonColor: '#dc2626'
         }).then(() => {
             window.history.back();
         });

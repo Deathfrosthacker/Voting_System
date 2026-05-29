@@ -168,7 +168,7 @@
 </head>
 
 <body>
-   
+
 
 <div class="main-container">
 
@@ -190,8 +190,8 @@
 
         <form action="registerdb.php" method="POST">
             <div class="form-group">
-                <label>Student ID</label>
-                <input placeholder="Enter your Student ID" type="text" name="id" required>
+                <label>ID Number</label>
+                <input placeholder="Enter your ID Number" type="text" name="id" required>
             </div>
             <div class="form-group">
                 <label>Full Name</label>
