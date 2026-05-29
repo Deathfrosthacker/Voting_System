@@ -58,66 +58,72 @@ $voteInfo = $hasVoted ? mysqli_fetch_assoc($votedResult) : null;
    HANDLE VOTE SUBMISSION
 ========================= */
 if (isset($_POST['vote']) && !$hasVoted) {
-    $candidate_id = (int)$_POST['candidate_id'];
-
-    // Verify candidate exists and get position
-    $verifyCand = mysqli_prepare($conn, "SELECT position FROM candidates WHERE id = ?");
-    mysqli_stmt_bind_param($verifyCand, "i", $candidate_id);
-    mysqli_stmt_execute($verifyCand);
-    $candResult = mysqli_stmt_get_result($verifyCand);
-    
-    if (mysqli_num_rows($candResult) === 0) {
+    // ✅ ADDED: CSRF validation for vote submission
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $status = "error";
-        $error_msg = "Invalid candidate selected.";
+        $error_msg = "Invalid security token. Please refresh the page and try again.";
     } else {
-        $candData = mysqli_fetch_assoc($candResult);
-        
-        // Verify candidate belongs to this position
-        if ($candData['position'] !== $position) {
+        $candidate_id = (int)$_POST['candidate_id'];
+
+        // Verify candidate exists and get position
+        $verifyCand = mysqli_prepare($conn, "SELECT position FROM candidates WHERE id = ?");
+        mysqli_stmt_bind_param($verifyCand, "i", $candidate_id);
+        mysqli_stmt_execute($verifyCand);
+        $candResult = mysqli_stmt_get_result($verifyCand);
+
+        if (mysqli_num_rows($candResult) === 0) {
             $status = "error";
-            $error_msg = "Candidate does not belong to this position.";
+            $error_msg = "Invalid candidate selected.";
         } else {
-            // Double-check user hasn't voted for this position
-            $doubleCheck = mysqli_prepare($conn, "
-                SELECT COUNT(*) as count 
-                FROM votes v 
-                JOIN candidates c ON v.candidate_id = c.id 
-                WHERE v.user_id = ? AND c.position = ?
-            ");
-            mysqli_stmt_bind_param($doubleCheck, "is", $user_id, $position);
-            mysqli_stmt_execute($doubleCheck);
-            $checkResult = mysqli_stmt_get_result($doubleCheck);
-            $checkData = mysqli_fetch_assoc($checkResult);
-            
-            if ($checkData['count'] > 0) {
+            $candData = mysqli_fetch_assoc($candResult);
+
+            // Verify candidate belongs to this position
+            if ($candData['position'] !== $position) {
                 $status = "error";
-                $error_msg = "You have already voted for this position.";
+                $error_msg = "Candidate does not belong to this position.";
             } else {
-                // Insert vote
-                $insert = mysqli_prepare($conn, "
-                    INSERT INTO votes (user_id, candidate_id, vote_time)
-                    VALUES (?, ?, NOW())
+                // Double-check user hasn't voted for this position
+                $doubleCheck = mysqli_prepare($conn, "
+                    SELECT COUNT(*) as count 
+                    FROM votes v 
+                    JOIN candidates c ON v.candidate_id = c.id 
+                    WHERE v.user_id = ? AND c.position = ?
                 ");
-                mysqli_stmt_bind_param($insert, "ii", $user_id, $candidate_id);
-                
-                if (mysqli_stmt_execute($insert)) {
-                    // 🔥 AUDIT LOG
-                    $activity = "Voted for $position";
-                    $logStmt = mysqli_prepare($conn, "
-                        INSERT INTO logs (user_id, activity, log_time)
+                mysqli_stmt_bind_param($doubleCheck, "is", $user_id, $position);
+                mysqli_stmt_execute($doubleCheck);
+                $checkResult = mysqli_stmt_get_result($doubleCheck);
+                $checkData = mysqli_fetch_assoc($checkResult);
+
+                if ($checkData['count'] > 0) {
+                    $status = "error";
+                    $error_msg = "You have already voted for this position.";
+                } else {
+                    // Insert vote
+                    $insert = mysqli_prepare($conn, "
+                        INSERT INTO votes (user_id, candidate_id, vote_time)
                         VALUES (?, ?, NOW())
                     ");
-                    mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
-                    mysqli_stmt_execute($logStmt);
+                    mysqli_stmt_bind_param($insert, "ii", $user_id, $candidate_id);
 
-                    $status = "success";
-                    
-                    // Refresh vote status
-                    header("Location: vote.php?position=" . urlencode($position) . "&voted=1");
-                    exit();
-                } else {
-                    $status = "error";
-                    $error_msg = "Database error: " . mysqli_error($conn);
+                    if (mysqli_stmt_execute($insert)) {
+                        // AUDIT LOG
+                        $activity = "Voted for $position";
+                        $logStmt = mysqli_prepare($conn, "
+                            INSERT INTO logs (user_id, activity, log_time)
+                            VALUES (?, ?, NOW())
+                        ");
+                        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+                        mysqli_stmt_execute($logStmt);
+
+                        $status = "success";
+
+                        // Refresh vote status
+                        header("Location: vote.php?position=" . urlencode($position) . "&voted=1");
+                        exit();
+                    } else {
+                        $status = "error";
+                        $error_msg = "Database error: " . mysqli_error($conn);
+                    }
                 }
             }
         }
@@ -157,13 +163,13 @@ $candidates = mysqli_query($conn, "
         <h1>
             🗳️ <?php echo htmlspecialchars($pos['position_name']); ?>
         </h1>
-        
+
         <?php if (!empty($pos['description'])): ?>
         <p class="description">
             <?php echo htmlspecialchars($pos['description']); ?>
         </p>
         <?php endif; ?>
-        
+
         <div class="date-range">
             📅 <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
             → <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
@@ -212,10 +218,10 @@ $candidates = mysqli_query($conn, "
         <h2><?php echo $hasVoted ? 'Candidates' : 'Select Your Candidate'; ?></h2>
 
         <?php if (mysqli_num_rows($candidates) > 0): ?>
-            
+
             <?php while ($cand = mysqli_fetch_assoc($candidates)): ?>
                 <?php $isVotedFor = ($hasVoted && $voteInfo['voted_for'] === $cand['name']); ?>
-                
+
                 <div class="candidate-item <?php echo $isVotedFor ? 'voted' : ''; ?>">
                     <div class="candidate-name">
                         <?php echo htmlspecialchars($cand['name']); ?>
@@ -226,6 +232,8 @@ $candidates = mysqli_query($conn, "
 
                     <?php if (!$hasVoted): ?>
                         <form method="POST" style="margin: 0;">
+                            <!-- ✅ ADDED: CSRF token field -->
+                            <?php echo csrf_input_field(); ?>
                             <input type="hidden" name="candidate_id" value="<?php echo $cand['id']; ?>">
                             <button type="submit" name="vote" class="vote-btn">
                                 Vote for <?php echo htmlspecialchars(explode(' ', $cand['name'])[0]); ?>

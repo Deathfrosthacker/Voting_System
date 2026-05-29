@@ -226,7 +226,7 @@
             <span>Dashboard</span>
         </a>
 
-        <a href="./positions.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == './Position/positions.php' ? 'active' : ''; ?>">
+        <a href="./positions.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'positions.php' ? 'active' : ''; ?>">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
                 <path d="M10 7V13M7 10H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -234,7 +234,7 @@
             <span>Positions</span>
         </a>
 
-        <a href="./add_candidate.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == './Candidate/add_candidate.php' ? 'active' : ''; ?>">
+        <a href="./add_candidate.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'add_candidate.php' ? 'active' : ''; ?>">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M16 17V15C16 13.3431 14.6569 12 13 12H7C5.34315 12 4 13.3431 4 15V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 <circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="2"/>
@@ -250,7 +250,7 @@
             <span>Votes</span>
         </a>
 
-        <a href="./adminadd.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
+        <a href="./adminadd.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'adminadd.php' ? 'active' : ''; ?>">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M16 17V15C16 13.3431 14.6569 12 13 12H7C5.34315 12 4 13.3431 4 15V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 <circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="2"/>

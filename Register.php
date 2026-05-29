@@ -205,7 +205,7 @@
 
             <div class="form-group">
                 <label>Password</label>
-                <input placeholder="8 characters minimum" type="Password" type="password" name="password" required>
+                <input placeholder="8 characters minimum" type="password" name="password" required minlength="8">
             </div>
 
             <div class="form-group">

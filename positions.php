@@ -220,7 +220,7 @@ $positions = mysqli_query(
 function confirmDelete(id, positionName) {
     Swal.fire({
         title: 'Are you sure?',
-        html: `You are about to delete the position: <strong>${positionName}</strong>`,
+        html: `You are about to delete: <strong>${positionName}</strong>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
@@ -229,7 +229,25 @@ function confirmDelete(id, positionName) {
         cancelButtonText: 'Cancel'
     }).then((result) => {
         if (result.isConfirmed) {
-            window.location.href = `delete_position.php?id=${id}`;
+            // ✅ CHANGED: Submit as POST form with CSRF token instead of GET link
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'delete_position.php';
+
+            const idInput = document.createElement('input');
+            idInput.type = 'hidden';
+            idInput.name = 'id';
+            idInput.value = id;
+            form.appendChild(idInput);
+
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '<?php echo generate_csrf_token(); ?>';
+            form.appendChild(csrfInput);
+
+            document.body.appendChild(form);
+            form.submit();
         }
     });
 }

@@ -32,7 +32,7 @@ if ($logsResult === false) {
 }
 
 /* Fetch statistics */
-$totalUsers = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions"))['total'];
+$totalPositions = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions"))['total'];
 $totalCandidates = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM candidates"))['total'];
 $totalVotes = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM votes"))['total'];
 
@@ -435,7 +435,7 @@ $latestCandidate = mysqli_query(
                     <i class="fas fa-briefcase"></i>
                 </div>
             </div>
-            <p><?php echo $totalUsers; ?></p>
+            <p><?php echo $totalPositions; ?></p>
         </div>
 
         <div class="stat-card">

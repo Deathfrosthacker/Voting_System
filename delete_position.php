@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -8,13 +9,19 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-// Get position ID
-if (!isset($_GET['id']) || empty($_GET['id'])) {
+// ✅ CHANGED: Accept POST only, reject GET requests
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id']) || empty($_POST['id'])) {
     header("Location: positions.php?status=error");
     exit();
 }
 
-$position_id = mysqli_real_escape_string($conn, $_GET['id']);
+// ✅ ADDED: CSRF validation for deletion
+if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    header("Location: positions.php?status=csrf_error");
+    exit();
+}
+
+$position_id = mysqli_real_escape_string($conn, $_POST['id']);
 
 // First, get the position name for logging
 $query = "SELECT position_name FROM positions WHERE id = '$position_id'";
