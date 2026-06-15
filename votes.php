@@ -2,17 +2,13 @@
 session_start();
 require_once "./config/connection.php";
 
-/* =====================
-   ADMIN PROTECTION
-===================== */
+/*  ADMIN PROTECTION */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: ../login.php");
     exit();
 }
 
-/* =====================
-   FETCH POSITIONS
-===================== */
+/*    FETCH POSITIONS */
 $positions = mysqli_query($conn, "
     SELECT position_name, start_date, end_date
     FROM positions

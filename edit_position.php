@@ -28,9 +28,7 @@ if (mysqli_num_rows($result) == 0) {
 
 $position = mysqli_fetch_assoc($result);
 
-/* =========================
-   HANDLE UPDATE POSITION
-========================= */
+/*    HANDLE UPDATE POSITION */
 if (isset($_POST['update_position'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_message = "Invalid CSRF token. Please try again.";

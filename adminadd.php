@@ -9,9 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-/* =========================
-   HANDLE ADD ADMIN
-========================= */
+/*    HANDLE ADD ADMIN */
 if (isset($_POST['add_admin'])) {
 
     // ADDED: CSRF validation

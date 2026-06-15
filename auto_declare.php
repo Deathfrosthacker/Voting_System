@@ -5,9 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once "./config/connection.php";
 
-/* =========================
-   CREATE RESULTS TABLE
-========================= */
+/*    CREATE RESULTS TABLE */
 $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     id INT AUTO_INCREMENT PRIMARY KEY,
     position_name VARCHAR(255) NOT NULL,
@@ -18,9 +16,7 @@ $createTable = "CREATE TABLE IF NOT EXISTS election_results (
 )";
 mysqli_query($conn, $createTable);
 
-/* =========================
-   FIND EXPIRED ELECTIONS
-========================= */
+/*    FIND EXPIRED ELECTIONS */
 $expired = mysqli_query($conn, "
     SELECT id, position_name, end_date
     FROM positions
@@ -30,9 +26,7 @@ $expired = mysqli_query($conn, "
       )
 ");
 
-/* =========================
-   PROCESS EACH EXPIRED
-========================= */
+/*    PROCESS EACH EXPIRED */
 while ($pos = mysqli_fetch_assoc($expired)) {
 
     $pos_id   = (int)$pos['id'];
