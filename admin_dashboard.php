@@ -26,7 +26,7 @@ $logsQuery = "
 ";
 $logsResult = mysqli_query($conn, $logsQuery);
 
-// ✅ ADDED: Error handling for logs query
+// ADDED: Error handling for logs query
 if ($logsResult === false) {
     $logsError = "Error fetching logs: " . mysqli_error($conn);
 }

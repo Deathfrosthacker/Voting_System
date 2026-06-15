@@ -58,7 +58,7 @@ $voteInfo = $hasVoted ? mysqli_fetch_assoc($votedResult) : null;
    HANDLE VOTE SUBMISSION
 ========================= */
 if (isset($_POST['vote']) && !$hasVoted) {
-    // ✅ ADDED: CSRF validation for vote submission
+    // ADDED: CSRF validation for vote submission
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $status = "error";
         $error_msg = "Invalid security token. Please refresh the page and try again.";
@@ -232,7 +232,7 @@ $candidates = mysqli_query($conn, "
 
                     <?php if (!$hasVoted): ?>
                         <form method="POST" style="margin: 0;">
-                            <!-- ✅ ADDED: CSRF token field -->
+                            <!-- ADDED: CSRF token field -->
                             <?php echo csrf_input_field(); ?>
                             <input type="hidden" name="candidate_id" value="<?php echo $cand['id']; ?>">
                             <button type="submit" name="vote" class="vote-btn">

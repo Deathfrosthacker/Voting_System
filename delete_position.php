@@ -9,13 +9,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-// ✅ CHANGED: Accept POST only, reject GET requests
+// CHANGED: Accept POST only, reject GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id']) || empty($_POST['id'])) {
     header("Location: positions.php?status=error");
     exit();
 }
 
-// ✅ ADDED: CSRF validation for deletion
+// ADDED: CSRF validation for deletion
 if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
     header("Location: positions.php?status=csrf_error");
     exit();

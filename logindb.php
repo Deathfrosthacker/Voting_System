@@ -11,7 +11,7 @@
         $query = "SELECT * FROM users WHERE id_number = '$id_number' LIMIT 1";
         $result = mysqli_query($conn, $query);
 
-        // ✅ ADDED: Error handling if query fails
+        //ADDED: Error handling if query fails
         if ($result === false) {
             $status = "db_error";
             $error_detail = mysqli_error($conn);
@@ -22,12 +22,12 @@
             // Verify password
             if (password_verify($password, $user['password'])) {
 
-                // ✅ ADDED: Regenerate session ID to prevent session fixation
+                // ADDED: Regenerate session ID to prevent session fixation
                 session_regenerate_id(true);
 
                 // Set session variables
                 $_SESSION['user_id']    = $user['id'];
-                $_SESSION['id_number']  = $user['id_number'];  // ✅ CHANGED: student_id → id_number
+                $_SESSION['id_number']  = $user['id_number'];  //CHANGED: student_id → id_number
                 $_SESSION['role']       = $user['role'];
 
                 $status = "success";
@@ -87,7 +87,7 @@
     <?php elseif ($status === "not_found"): ?>
         Swal.fire({
             icon: 'warning',
-            title: 'ID Number Not Found',  // ✅ CHANGED: Student ID → ID Number
+            title: 'ID Number Not Found',  //CHANGED: Student ID → ID Number
             text: 'Please check your ID Number',
             confirmButtonColor: '#f59e0b'
         }).then(() => {

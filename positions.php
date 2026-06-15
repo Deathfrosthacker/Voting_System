@@ -14,7 +14,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 ========================= */
 if (isset($_POST['add_position'])) {
 
-    // ✅ ADDED: CSRF validation
+    //ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: positions.php?status=csrf_error");
         exit();
@@ -39,12 +39,12 @@ if (isset($_POST['add_position'])) {
 
         mysqli_query($conn, $log_sql);
 
-        // ✅ REDIRECT to prevent form resubmission
+        //REDIRECT to prevent form resubmission
         header("Location: positions.php?status=success");
         exit();
 
     } else {
-        // ✅ REDIRECT with error
+        //REDIRECT with error
         header("Location: positions.php?status=error");
         exit();
     }
@@ -106,7 +106,7 @@ $positions = mysqli_query(
 
 
             <form method="POST">
-                <!-- ✅ ADDED: CSRF token field -->
+                <!--ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
 
                 <div class="form-group">
@@ -229,7 +229,7 @@ function confirmDelete(id, positionName) {
         cancelButtonText: 'Cancel'
     }).then((result) => {
         if (result.isConfirmed) {
-            // ✅ CHANGED: Submit as POST form with CSRF token instead of GET link
+            // CHANGED: Submit as POST form with CSRF token instead of GET link
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = 'delete_position.php';
@@ -294,7 +294,7 @@ function confirmDelete(id, positionName) {
     }).then(() => {
         window.history.replaceState({}, document.title, 'positions.php');
     });
-<?php elseif ($_GET['status'] === "csrf_error"): ?>  <!-- ✅ ADDED: CSRF error handler -->
+<?php elseif ($_GET['status'] === "csrf_error"): ?>  <!-- ADDED: CSRF error handler -->
     Swal.fire({
         icon: 'error',
         title: 'Security Error!',

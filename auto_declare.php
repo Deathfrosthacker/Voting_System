@@ -1,5 +1,5 @@
 <?php
-// ✅ FIXED: Only start session if not already active
+// FIXED: Only start session if not already active
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

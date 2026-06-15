@@ -7,7 +7,7 @@ if (isset($_SESSION['user_id'])) {
     $user_id  = $_SESSION['user_id'];
     $activity = "Logged out";
 
-    // ✅ FIXED: Changed column names to match schema (user_id, activity, log_time)
+    // FIXED: Changed column names to match schema (user_id, activity, log_time)
     mysqli_query(
         $conn,
         "INSERT INTO logs (user_id, activity, log_time)

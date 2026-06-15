@@ -22,7 +22,7 @@ $positions = mysqli_query(
 
 // Handle candidate insert
 if (isset($_POST['add_candidate'])) {
-    // ✅ ADDED: CSRF validation
+    //ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: add_candidate.php?status=csrf_error");
         exit();
@@ -108,7 +108,7 @@ if (isset($_POST['add_candidate'])) {
         <div class="form-box" id="candidateForm">
             <h3 id="formTitle">Add Candidate</h3>
             <form method="POST">
-                <!-- ✅ ADDED: CSRF token field -->
+                <!-- ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
 
                 <input type="hidden" name="position_name" id="position_name">
@@ -184,7 +184,7 @@ function openForm(position, start, end) {
     }).then(() => {
         window.location.href = "add_candidate.php";
     });
-<?php elseif ($status === "csrf_error"): ?>  <!-- ✅ ADDED: CSRF error handler -->
+<?php elseif ($status === "csrf_error"): ?>  <!--ADDED: CSRF error handler -->
     Swal.fire({
         icon: 'error',
         title: 'Security Error!',

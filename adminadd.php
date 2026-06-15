@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./csrf_helper.php";  // ✅ ADDED: CSRF protection
+require_once "./csrf_helper.php";  // ADDED: CSRF protection
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -14,13 +14,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 ========================= */
 if (isset($_POST['add_admin'])) {
 
-    // ✅ ADDED: CSRF validation
+    // ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: adminadd.php?status=csrf_error");
         exit();
     }
 
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);  // ✅ CHANGED: student_id → id_number
+    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);  // CHANGED: student_id → id_number
     $name  = mysqli_real_escape_string($conn, $_POST['name']);
     $email = mysqli_real_escape_string($conn, $_POST['email']);
     $role = 'admin';
@@ -284,11 +284,11 @@ $admins = mysqli_query(
                 Add New Admin
             </h3>
             <form method="POST">
-                <!-- ✅ ADDED: CSRF token field -->
+                <!-- ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
 
                 <div class="form-group">
-                    <label>ID Number</label>  <!-- ✅ CHANGED: Student ID → ID Number -->
+                    <label>ID Number</label>  <!-- CHANGED: Student ID → ID Number -->
                     <input placeholder="Enter ID Number" type="text" name="id_number" required>  <!-- ✅ CHANGED: name="id" → name="id_number" -->
                 </div>
                 <div class="form-group">
@@ -324,7 +324,7 @@ $admins = mysqli_query(
                 <table>
                     <thead>
                         <tr>
-                            <th>ID Number</th>  <!-- ✅ CHANGED: Student ID → ID Number -->
+                            <th>ID Number</th>  <!--  CHANGED: Student ID → ID Number -->
                             <th>Name</th>
                             <th>Email</th>
                             <th>Date Added</th>
