@@ -3,9 +3,7 @@ session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 
-/* =========================
-   AUTH PROTECTION
-========================= */
+/* AUTH PROTECTION */
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login.php");
     exit();
@@ -14,18 +12,14 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $status  = "";
 
-/* =========================
-   GET POSITION FROM URL
-========================= */
+/* GET POSITION FROM URL */
 if (!isset($_GET['position'])) {
     die("Invalid position");
 }
 
 $position = mysqli_real_escape_string($conn, $_GET['position']);
 
-/* =========================
-   FETCH POSITION DETAILS
-========================= */
+/*FETCH POSITION DETAILS */
 $posQuery = mysqli_query($conn, "
     SELECT position_name, start_date, end_date, description
     FROM positions
@@ -39,9 +33,7 @@ if (mysqli_num_rows($posQuery) === 0) {
 
 $pos = mysqli_fetch_assoc($posQuery);
 
-/* =========================
-   CHECK IF ALREADY VOTED
-========================= */
+/* CHECK IF ALREADY VOTED */
 $checkVoted = mysqli_prepare($conn, "
     SELECT v.vote_time, c.name as voted_for
     FROM votes v
@@ -54,9 +46,7 @@ $votedResult = mysqli_stmt_get_result($checkVoted);
 $hasVoted = mysqli_num_rows($votedResult) > 0;
 $voteInfo = $hasVoted ? mysqli_fetch_assoc($votedResult) : null;
 
-/* =========================
-   HANDLE VOTE SUBMISSION
-========================= */
+/* HANDLE VOTE SUBMISSION */
 if (isset($_POST['vote']) && !$hasVoted) {
     // ADDED: CSRF validation for vote submission
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -130,9 +120,7 @@ if (isset($_POST['vote']) && !$hasVoted) {
     }
 }
 
-/* =========================
-   FETCH CANDIDATES
-========================= */
+/* FETCH CANDIDATES */
 $candidates = mysqli_query($conn, "
     SELECT id, name
     FROM candidates

@@ -9,9 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-/* =========================
-   HANDLE ADD POSITION
-========================= */
+/*    HANDLE ADD POSITION */
 if (isset($_POST['add_position'])) {
 
     //ADDED: CSRF validation
