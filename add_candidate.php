@@ -33,6 +33,43 @@ if (isset($_POST['add_candidate'])) {
     $start_date     = $_POST['start_date'];
     $end_date       = $_POST['end_date'];
 
+    // FIX 2: Check for similar candidate names (case-insensitive, fuzzy matching)
+    $normalized_input = strtolower(trim($candidate_name));
+    $normalized_input = preg_replace('/[^a-z0-9]/', '', $normalized_input); // Remove special chars and spaces
+
+    $check_similar = mysqli_query($conn, "SELECT name FROM candidates WHERE position = '$position'");
+    $similar_found = false;
+    $similar_name = "";
+
+    while ($existing = mysqli_fetch_assoc($check_similar)) {
+        $existing_normalized = strtolower(trim($existing['name']));
+        $existing_normalized = preg_replace('/[^a-z0-9]/', '', $existing_normalized);
+
+        // Check if names are identical or very similar (80% match or more)
+        similar_text($normalized_input, $existing_normalized, $percent);
+
+        if ($normalized_input === $existing_normalized || $percent >= 80) {
+            $similar_found = true;
+            $similar_name = $existing['name'];
+            break;
+        }
+
+        // Also check if one contains the other (e.g., "John" vs "John Doe")
+        if (strpos($normalized_input, $existing_normalized) !== false || 
+            strpos($existing_normalized, $normalized_input) !== false) {
+            if (strlen($normalized_input) > 3 && strlen($existing_normalized) > 3) {
+                $similar_found = true;
+                $similar_name = $existing['name'];
+                break;
+            }
+        }
+    }
+
+    if ($similar_found) {
+        header("Location: add_candidate.php?status=similar_name&similar=" . urlencode($similar_name));
+        exit();
+    }
+
     $sql = "INSERT INTO candidates 
             (name, position, start_date, end_date)
             VALUES 
@@ -191,7 +228,7 @@ function openForm(position, start, end) {
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
     });
-<?php else: ?>
+<?php elseif ($status === "error"): ?>
     Swal.fire({
         icon: 'error',
         title: 'Error!',
@@ -199,6 +236,19 @@ function openForm(position, start, end) {
         confirmButtonColor: '#ef4444'
     });
 <?php endif; ?>
+</script>
+<?php endif; ?>
+
+<?php if (isset($_GET['status']) && $_GET['status'] === "similar_name"): ?>
+<script>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Similar Name Found!',
+        text: 'A candidate with a similar name ("<?php echo htmlspecialchars($_GET['similar'] ?? ''); ?>") already exists for this position. Please use a different name.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
 </script>
 <?php endif; ?>
 

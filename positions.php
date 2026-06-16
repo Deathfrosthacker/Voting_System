@@ -23,6 +23,24 @@ if (isset($_POST['add_position'])) {
     $start = $_POST['start_date'];
     $end   = $_POST['end_date'];
 
+    // FIX 1: Validate dates - prevent past dates
+    $today = date('Y-m-d');
+
+    if ($start < $today) {
+        header("Location: positions.php?status=past_start_date");
+        exit();
+    }
+
+    if ($end < $today) {
+        header("Location: positions.php?status=past_end_date");
+        exit();
+    }
+
+    if ($end < $start) {
+        header("Location: positions.php?status=invalid_date_range");
+        exit();
+    }
+
     $sql = "INSERT INTO positions (position_name, description, start_date, end_date)
             VALUES ('$name', '$description', '$start', '$end')";
 
@@ -120,12 +138,12 @@ $positions = mysqli_query(
                 <div class="date-inputs">
                     <div class="form-group">
                         <label for="start_date">Start Date <span>*</span></label>
-                        <input type="date" id="start_date" name="start_date" required>
+                        <input type="date" id="start_date" name="start_date" required min="<?php echo date('Y-m-d'); ?>">
                     </div>
 
                     <div class="form-group">
                         <label for="end_date">End Date <span>*</span></label>
-                        <input type="date" id="end_date" name="end_date" required>
+                        <input type="date" id="end_date" name="end_date" required min="<?php echo date('Y-m-d'); ?>">
                     </div>
                 </div>
 
@@ -298,6 +316,33 @@ function confirmDelete(id, positionName) {
         title: 'Security Error!',
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "past_start_date"): ?>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Start Date!',
+        text: 'Start date cannot be in the past. Please select today or a future date.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "past_end_date"): ?>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid End Date!',
+        text: 'End date cannot be in the past. Please select today or a future date.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "invalid_date_range"): ?>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Date Range!',
+        text: 'End date must be after or equal to the start date.',
+        confirmButtonColor: '#f59e0b'
     }).then(() => {
         window.history.replaceState({}, document.title, 'positions.php');
     });

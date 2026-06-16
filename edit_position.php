@@ -38,27 +38,40 @@ if (isset($_POST['update_position'])) {
         $start = $_POST['start_date'];
         $end = $_POST['end_date'];
 
-        $sql = "UPDATE positions 
-                SET position_name = '$name', 
-                    description = '$description', 
-                    start_date = '$start', 
-                    end_date = '$end'
-                WHERE id = '$position_id'";
+        // FIX 1: Validate dates when editing - prevent past end dates
+        $today = date('Y-m-d');
 
-        if (mysqli_query($conn, $sql)) {
-            // LOG ACTIVITY
-            $user_id = $_SESSION['user_id'];
-            $activity = "Updated Position: " . $name;
-
-            $log_sql = "INSERT INTO logs (user_id, activity, log_time)
-                        VALUES ('$user_id', '$activity', NOW())";
-
-            mysqli_query($conn, $log_sql);
-
-            header("Location: positions.php?status=updated");
-            exit();
+        // For editing, we allow the start date to be in the past if it already was
+        // But we don't allow changing it to a past date if it was future
+        if ($start < $today && $position['start_date'] >= $today) {
+            $error_message = "Start date cannot be changed to a past date.";
+        } elseif ($end < $today) {
+            $error_message = "End date cannot be in the past.";
+        } elseif ($end < $start) {
+            $error_message = "End date must be after or equal to the start date.";
         } else {
-            $error_message = "Error updating position. Please try again.";
+            $sql = "UPDATE positions 
+                    SET position_name = '$name', 
+                        description = '$description', 
+                        start_date = '$start', 
+                        end_date = '$end'
+                    WHERE id = '$position_id'";
+
+            if (mysqli_query($conn, $sql)) {
+                // LOG ACTIVITY
+                $user_id = $_SESSION['user_id'];
+                $activity = "Updated Position: " . $name;
+
+                $log_sql = "INSERT INTO logs (user_id, activity, log_time)
+                            VALUES ('$user_id', '$activity', NOW())";
+
+                mysqli_query($conn, $log_sql);
+
+                header("Location: positions.php?status=updated");
+                exit();
+            } else {
+                $error_message = "Error updating position. Please try again.";
+            }
         }
     }
 }
@@ -122,7 +135,7 @@ if (isset($_POST['update_position'])) {
 
                     <div class="form-group">
                         <label for="end_date">End Date <span>*</span></label>
-                        <input type="date" id="end_date" name="end_date" value="<?= $position['end_date'] ?>" required>
+                        <input type="date" id="end_date" name="end_date" value="<?= $position['end_date'] ?>" required min="<?= date('Y-m-d'); ?>">
                     </div>
                 </div>
 
