@@ -21,9 +21,10 @@ $position = mysqli_real_escape_string($conn, $_GET['position']);
 
 /*FETCH POSITION DETAILS */
 $posQuery = mysqli_query($conn, "
-    SELECT position_name, start_date, end_date, description
-    FROM positions
-    WHERE position_name = '$position'
+    SELECT p.*, r.name as region_name
+    FROM positions p
+    LEFT JOIN regions r ON p.region_id = r.id
+    WHERE p.position_name = '$position'
     LIMIT 1
 ");
 
@@ -120,11 +121,14 @@ if (isset($_POST['vote']) && !$hasVoted) {
     }
 }
 
-/* FETCH CANDIDATES */
+/* FETCH CANDIDATES with affiliation info */
 $candidates = mysqli_query($conn, "
-    SELECT id, name
-    FROM candidates
-    WHERE position = '$position'
+    SELECT c.id, c.name, c.is_independent, 
+           a.name as affiliation_name, a.color_code
+    FROM candidates c
+    LEFT JOIN affiliations a ON c.affiliation_id = a.id
+    WHERE c.position = '$position'
+    ORDER BY c.name ASC
 ");
 ?>
 
@@ -135,6 +139,50 @@ $candidates = mysqli_query($conn, "
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vote | <?php echo htmlspecialchars($position); ?></title>
 <link rel="stylesheet" href="vote_candidate.css">
+<style>
+    /* Affiliation Badge Styles */
+    .affiliation-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 8px;
+    }
+    .independent-badge {
+        background: #f3f4f6;
+        color: #6b7280;
+        border: 1px solid #e5e7eb;
+    }
+    .party-badge {
+        border: 1px solid transparent;
+    }
+    .color-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .candidate-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .scope-info {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+</style>
 </head>
 
 <body>
@@ -156,6 +204,17 @@ $candidates = mysqli_query($conn, "
         <p class="description">
             <?php echo htmlspecialchars($pos['description']); ?>
         </p>
+        <?php endif; ?>
+
+        <!-- Scope Info -->
+        <?php if ($pos['region_id']): ?>
+            <div class="scope-info">
+                🌍 This is a <strong>region-specific</strong> election for: <?php echo htmlspecialchars($pos['region_name']); ?>
+            </div>
+        <?php else: ?>
+            <div class="scope-info" style="background: #eff6ff; border-color: #bfdbfe; color: #1e40af;">
+                🌐 This is a <strong>global</strong> election open to all voters
+            </div>
         <?php endif; ?>
 
         <div class="date-range">
@@ -182,7 +241,7 @@ $candidates = mysqli_query($conn, "
             <div>
                 <strong>You have already voted for this position</strong>
                 <p style="margin-top: 4px; font-size: 14px;">
-                    Voted on <?php echo date('M d, Y \a\t g:i A', strtotime($voteInfo['vote_time'])); ?>
+                    Voted on <?php echo date('M d, Y 	 g:i A', strtotime($voteInfo['vote_time'])); ?>
                 </p>
             </div>
         </div>
@@ -211,10 +270,31 @@ $candidates = mysqli_query($conn, "
                 <?php $isVotedFor = ($hasVoted && $voteInfo['voted_for'] === $cand['name']); ?>
 
                 <div class="candidate-item <?php echo $isVotedFor ? 'voted' : ''; ?>">
-                    <div class="candidate-name">
-                        <?php echo htmlspecialchars($cand['name']); ?>
-                        <?php if ($isVotedFor): ?>
-                            <span class="voted-badge">✓ Your Vote</span>
+                    <div class="candidate-meta">
+                        <div class="candidate-name">
+                            <?php echo htmlspecialchars($cand['name']); ?>
+                            <?php if ($isVotedFor): ?>
+                                <span class="voted-badge">✓ Your Vote</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Affiliation Badge -->
+                        <?php if ($cand['is_independent']): ?>
+                            <span class="affiliation-badge independent-badge">
+                                ⚪ Independent Candidate
+                            </span>
+                        <?php elseif ($cand['affiliation_name']): ?>
+                            <span class="affiliation-badge party-badge" 
+                                  style="background: <?php echo htmlspecialchars($cand['color_code']); ?>20; 
+                                         color: <?php echo htmlspecialchars($cand['color_code']); ?>;
+                                         border-color: <?php echo htmlspecialchars($cand['color_code']); ?>40;">
+                                <span class="color-dot" style="background: <?php echo htmlspecialchars($cand['color_code']); ?>"></span>
+                                <?php echo htmlspecialchars($cand['affiliation_name']); ?>
+                            </span>
+                        <?php else: ?>
+                            <span class="affiliation-badge independent-badge">
+                                No Affiliation
+                            </span>
                         <?php endif; ?>
                     </div>
 

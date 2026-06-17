@@ -20,7 +20,7 @@
 
         .main-container {
             width: 100%;
-            height: 750px;
+            height: 800px;
             background: white;
             display: flex;
             border-radius: 12px;
@@ -171,6 +171,11 @@
 
 <body>
 
+<?php
+require_once "./config/connection.php";
+// Fetch regions for dropdown
+$regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
+?>
 
 <div class="main-container">
 
@@ -205,13 +210,26 @@
                 <input placeholder="Enter your Email Address" type="email" name="email" required>
             </div>
 
+            <!-- NEW: Region Selection (IEBC County equivalent) -->
+            <div class="form-group">
+                <label>Region / Campus / Chapter <span style="color:#6b7280;font-size:12px;">(Select your institutional location)</span></label>
+                <select name="region_id" required>
+                    <option value="">-- Select Region --</option>
+                    <?php while ($region = mysqli_fetch_assoc($regions)): ?>
+                        <option value="<?php echo $region['id']; ?>">
+                            <?php echo htmlspecialchars($region['name']); ?>
+                        </option>
+                    <?php endwhile; ?>
+                </select>
+            </div>
+
             <!-- Date of Birth Field -->
             <div class="form-group">
                 <label>Date of Birth <span style="color:#6b7280;font-size:12px;">(Must be 18+ years old)</span></label>
                 <input type="date" name="date_of_birth" id="date_of_birth" required max="">
             </div>
 
-            
+
             <div class="form-group">
                 <label>Password</label>
                 <input placeholder="8 characters minimum" type="password" name="password" required minlength="8">

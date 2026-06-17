@@ -5,6 +5,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $id_number  = mysqli_real_escape_string($conn, $_POST['id']);
     $name  = mysqli_real_escape_string($conn, $_POST['name']);
     $email = mysqli_real_escape_string($conn, $_POST['email']);
+    $region_id = isset($_POST['region_id']) ? (int)$_POST['region_id'] : null;
     $date_of_birth = $_POST['date_of_birth'];
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
@@ -36,9 +37,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // Hash password
                 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-                // Insert user with date_of_birth
-                $sql = "INSERT INTO users (id_number, name, email, date_of_birth, password, role)
-                        VALUES ( '$id_number', '$name', '$email', '$date_of_birth', '$hashedPassword', '$role')";
+                // Insert user with region_id and date_of_birth
+                $sql = "INSERT INTO users (id_number, name, email, region_id, date_of_birth, password, role)
+                        VALUES ( '$id_number', '$name', '$email', " . 
+                        ($region_id ? "'$region_id'" : "NULL") . 
+                        ", '$date_of_birth', '$hashedPassword', '$role')";
 
                 if (mysqli_query($conn, $sql)) {
                     $status = "success";

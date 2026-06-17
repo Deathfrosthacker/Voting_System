@@ -11,7 +11,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 $candidates = mysqli_query(
     $conn,
-    "SELECT * FROM candidates ORDER BY start_date DESC"
+    "SELECT c.*, a.name as affiliation_name, a.color_code 
+     FROM candidates c 
+     LEFT JOIN affiliations a ON c.affiliation_id = a.id 
+     ORDER BY c.start_date DESC"
 );
 
 // Fetch positions
@@ -19,6 +22,9 @@ $positions = mysqli_query(
     $conn,
     "SELECT * FROM positions ORDER BY start_date DESC"
 );
+
+// Fetch affiliations for dropdown
+$affiliations = mysqli_query($conn, "SELECT id, name, color_code FROM affiliations ORDER BY name ASC");
 
 // Handle candidate insert
 if (isset($_POST['add_candidate'])) {
@@ -32,6 +38,8 @@ if (isset($_POST['add_candidate'])) {
     $position       = $_POST['position_name'];
     $start_date     = $_POST['start_date'];
     $end_date       = $_POST['end_date'];
+    $is_independent = isset($_POST['is_independent']) ? 1 : 0;
+    $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
 
     // FIX 2: Check for similar candidate names (case-insensitive, fuzzy matching)
     $normalized_input = strtolower(trim($candidate_name));
@@ -71,9 +79,10 @@ if (isset($_POST['add_candidate'])) {
     }
 
     $sql = "INSERT INTO candidates 
-            (name, position, start_date, end_date)
+            (name, position, start_date, end_date, is_independent, affiliation_id)
             VALUES 
-            ('$candidate_name', '$position', '$start_date', '$end_date')";
+            ('$candidate_name', '$position', '$start_date', '$end_date', $is_independent, " . 
+            ($affiliation_id ? "'$affiliation_id'" : "NULL") . ")";
 
     if (mysqli_query($conn, $sql)) {
         // Log activity
@@ -101,6 +110,43 @@ if (isset($_POST['add_candidate'])) {
     <title>Add Candidate - VoteSystem</title>
     <link rel="stylesheet" href="style3.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .affiliation-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .independent-badge {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        .checkbox-group label {
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .affiliation-select {
+            transition: all 0.3s ease;
+        }
+        .affiliation-select.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
 
@@ -129,7 +175,6 @@ if (isset($_POST['add_candidate'])) {
                         <p class="description"><?php echo htmlspecialchars($pos['description']); ?></p>
                         <div class="position-dates">
                             <div class="date-item">
-
                                 <span>Start: <?php echo date('M d, Y', strtotime($pos['start_date'])); ?></span>
                             </div>
                             <div class="date-item">
@@ -157,6 +202,28 @@ if (isset($_POST['add_candidate'])) {
                     <input type="text" name="candidate_name" id="candidate_name" required placeholder="Enter candidate full name">
                 </div>
 
+                <!-- NEW: Independent Candidate Checkbox (IEBC Independent Candidate equivalent) -->
+                <div class="checkbox-group">
+                    <input type="checkbox" id="is_independent" name="is_independent" onchange="toggleAffiliation()">
+                    <label for="is_independent">Independent Candidate (no affiliation)</label>
+                </div>
+
+                <!-- NEW: Affiliation Dropdown (IEBC Political Party equivalent) -->
+                <div class="form-group affiliation-select" id="affiliationGroup">
+                    <label for="affiliation_id">Affiliation / Group / Party</label>
+                    <select name="affiliation_id" id="affiliation_id">
+                        <option value="">-- Select Affiliation --</option>
+                        <?php 
+                        mysqli_data_seek($affiliations, 0);
+                        while ($aff = mysqli_fetch_assoc($affiliations)): 
+                        ?>
+                            <option value="<?php echo $aff['id']; ?>">
+                                <?php echo htmlspecialchars($aff['name']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
                 <button type="submit" name="add_candidate" class="btn-primary">
                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -174,6 +241,7 @@ if (isset($_POST['add_candidate'])) {
                     <tr>
                         <th>Candidate Name</th>
                         <th>Position</th>
+                        <th>Affiliation</th>
                         <th>Start Date</th>
                         <th>End Date</th>
                     </tr>
@@ -183,6 +251,18 @@ if (isset($_POST['add_candidate'])) {
                     <tr>
                         <td><?php echo htmlspecialchars($row['name']); ?></td>
                         <td><?php echo htmlspecialchars($row['position']); ?></td>
+                        <td>
+                            <?php if ($row['is_independent']): ?>
+                                <span class="affiliation-badge independent-badge">Independent</span>
+                            <?php elseif ($row['affiliation_name']): ?>
+                                <span class="affiliation-badge" style="background: <?php echo htmlspecialchars($row['color_code']); ?>20; color: <?php echo htmlspecialchars($row['color_code']); ?>;">
+                                    <span class="color-dot" style="width:8px;height:8px;border-radius:50%;background:<?php echo htmlspecialchars($row['color_code']); ?>;display:inline-block;"></span>
+                                    <?php echo htmlspecialchars($row['affiliation_name']); ?>
+                                </span>
+                            <?php else: ?>
+                                <span style="color: #94a3b8;">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo date('M d, Y', strtotime($row['start_date'])); ?></td>
                         <td><?php echo date('M d, Y', strtotime($row['end_date'])); ?></td>
                     </tr>
@@ -206,6 +286,19 @@ function openForm(position, start, end) {
 
     // Scroll to form smoothly
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function toggleAffiliation() {
+    const isIndependent = document.getElementById('is_independent').checked;
+    const affiliationGroup = document.getElementById('affiliationGroup');
+    const affiliationSelect = document.getElementById('affiliation_id');
+
+    if (isIndependent) {
+        affiliationGroup.classList.add('disabled');
+        affiliationSelect.value = '';
+    } else {
+        affiliationGroup.classList.remove('disabled');
+    }
 }
 </script>
 

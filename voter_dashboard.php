@@ -8,13 +8,27 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'voter') {
     exit();
 }
 
-/* Fetch active positions */
+$user_id = $_SESSION['user_id'];
+
+/* Fetch voter's region */
+$userQuery = mysqli_query($conn, "SELECT region_id FROM users WHERE id = '$user_id' LIMIT 1");
+$userData = mysqli_fetch_assoc($userQuery);
+$voter_region_id = $userData['region_id'] ?? null;
+
+/* Fetch active positions - filtered by voter's region */
+$regionFilter = $voter_region_id ? "OR region_id = '$voter_region_id'" : "";
 $positions = mysqli_query(
     $conn,
-    "SELECT * FROM positions 
-     WHERE CURDATE() BETWEEN start_date AND end_date
-     ORDER BY start_date ASC"
+    "SELECT p.*, r.name as region_name 
+     FROM positions p 
+     LEFT JOIN regions r ON p.region_id = r.id
+     WHERE CURDATE() BETWEEN p.start_date AND p.end_date
+       AND (p.region_id IS NULL $regionFilter)
+     ORDER BY p.start_date ASC"
 );
+
+/* Count total active positions (for display) */
+$totalPositions = mysqli_num_rows($positions);
 ?>
 
 <!DOCTYPE html>
@@ -33,7 +47,6 @@ $positions = mysqli_query(
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-          
             min-height: 100vh;
             padding: 20px;
         }
@@ -97,6 +110,24 @@ $positions = mysqli_query(
             font-size: 16px;
         }
 
+        /* INFO BAR */
+        .info-bar {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            padding: 16px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #1e40af;
+            font-size: 14px;
+        }
+
+        .info-bar strong {
+            color: #1e40af;
+        }
+
         /* POSITIONS GRID */
         .positions-grid {
             display: grid;
@@ -131,6 +162,27 @@ $positions = mysqli_query(
             font-size: 14px;
             margin-bottom: 20px;
             line-height: 1.5;
+        }
+
+        .scope-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .scope-global {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .scope-regional {
+            background: #d1fae5;
+            color: #065f46;
         }
 
         .date-info {
@@ -222,7 +274,7 @@ $positions = mysqli_query(
 <body>
 
 <div class="main-container">
-    
+
     <!-- HEADER -->
     <div class="header">
         <h1>🗳️ Voting System</h1>
@@ -235,13 +287,39 @@ $positions = mysqli_query(
         <p>Select a position below to cast your vote in the active elections</p>
     </div>
 
+    <!-- INFO BAR -->
+    <?php if ($totalPositions > 0): ?>
+    <div class="info-bar">
+        <span>ℹ️</span>
+        <div>
+            <strong><?php echo $totalPositions; ?></strong> active election(s) available for you. 
+            <?php if ($voter_region_id): ?>
+                Showing global elections plus elections for your region.
+            <?php else: ?>
+                Showing all global elections.
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- POSITIONS -->
     <?php if (mysqli_num_rows($positions) > 0): ?>
         <div class="positions-grid">
             <?php while ($pos = mysqli_fetch_assoc($positions)): ?>
                 <div class="position-card">
                     <h3><?php echo htmlspecialchars($pos['position_name']); ?></h3>
-                    
+
+                    <!-- Scope Badge -->
+                    <?php if ($pos['region_id']): ?>
+                        <span class="scope-badge scope-regional">
+                            🌍 <?php echo htmlspecialchars($pos['region_name']); ?>
+                        </span>
+                    <?php else: ?>
+                        <span class="scope-badge scope-global">
+                            🌐 Global Election
+                        </span>
+                    <?php endif; ?>
+
                     <p class="description">
                         <?php echo htmlspecialchars($pos['description']); ?>
                     </p>
@@ -261,7 +339,7 @@ $positions = mysqli_query(
     <?php else: ?>
         <div class="no-elections">
             <h3>📭 No Active Elections</h3>
-            <p>There are no elections currently running. Please check back later.</p>
+            <p>There are no elections currently running for your region. Please check back later.</p>
         </div>
     <?php endif; ?>
 

@@ -23,6 +23,10 @@ if (isset($_POST['add_position'])) {
     $start = $_POST['start_date'];
     $end   = $_POST['end_date'];
 
+    // NEW: Region scope
+    $scope = $_POST['scope'] ?? 'global';
+    $region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : 'NULL';
+
     // FIX 1: Validate dates - prevent past dates
     $today = date('Y-m-d');
 
@@ -41,8 +45,8 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    $sql = "INSERT INTO positions (position_name, description, start_date, end_date)
-            VALUES ('$name', '$description', '$start', '$end')";
+    $sql = "INSERT INTO positions (position_name, description, start_date, end_date, region_id)
+            VALUES ('$name', '$description', '$start', '$end', $region_id)";
 
     if (mysqli_query($conn, $sql)) {
 
@@ -66,11 +70,17 @@ if (isset($_POST['add_position'])) {
     }
 }
 
-/* Fetch all positions */
+/* Fetch all positions with region info */
 $positions = mysqli_query(
     $conn,
-    "SELECT * FROM positions ORDER BY start_date DESC"
+    "SELECT p.*, r.name as region_name 
+     FROM positions p 
+     LEFT JOIN regions r ON p.region_id = r.id 
+     ORDER BY p.start_date DESC"
 );
+
+/* Fetch regions for dropdown */
+$regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
 ?>
 
 <!DOCTYPE html>
@@ -81,8 +91,58 @@ $positions = mysqli_query(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Positions - VoteSystem</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-
+    <style>
+        .scope-selector {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 16px;
+        }
+        .scope-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .scope-option:hover {
+            border-color: #2563eb;
+        }
+        .scope-option.selected {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .scope-option input {
+            width: 18px;
+            height: 18px;
+        }
+        .region-select-group {
+            display: none;
+            margin-bottom: 20px;
+        }
+        .region-select-group.active {
+            display: block;
+        }
+        .scope-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .scope-global {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .scope-regional {
+            background: #d1fae5;
+            color: #065f46;
+        }
+    </style>
 </head>
 
 <body>
@@ -116,11 +176,6 @@ $positions = mysqli_query(
                 Add New Position
             </h3>
 
-
-
-
-
-
             <form method="POST">
                 <!--ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
@@ -133,6 +188,40 @@ $positions = mysqli_query(
                 <div class="form-group">
                     <label for="description">Description <span>*</span></label>
                     <textarea id="description" name="description" placeholder="Brief description of the position's responsibilities and requirements" required></textarea>
+                </div>
+
+                <!-- NEW: Scope Selection -->
+                <div class="form-group">
+                    <label>Election Scope <span>*</span></label>
+                    <div class="scope-selector">
+                        <div class="scope-option selected" onclick="selectScope('global')">
+                            <input type="radio" name="scope" value="global" id="scope_global" checked>
+                            <label for="scope_global" style="margin:0;cursor:pointer;">
+                                <strong>Global</strong><br>
+                                <small style="color:#64748b;">All voters can see and vote</small>
+                            </label>
+                        </div>
+                        <div class="scope-option" onclick="selectScope('regional')">
+                            <input type="radio" name="scope" value="regional" id="scope_regional">
+                            <label for="scope_regional" style="margin:0;cursor:pointer;">
+                                <strong>Region-Specific</strong><br>
+                                <small style="color:#64748b;">Only voters from selected region</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Region Selection (shown only when regional selected) -->
+                <div class="form-group region-select-group" id="regionSelectGroup">
+                    <label for="region_id">Select Region <span>*</span></label>
+                    <select name="region_id" id="region_id">
+                        <option value="">-- Select Region --</option>
+                        <?php while ($region = mysqli_fetch_assoc($regions)): ?>
+                            <option value="<?php echo $region['id']; ?>">
+                                <?php echo htmlspecialchars($region['name']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
                 </div>
 
                 <div class="date-inputs">
@@ -175,6 +264,7 @@ $positions = mysqli_query(
                         <tr>
                             <th>Position</th>
                             <th>Description</th>
+                            <th>Scope</th>
                             <th>Start Date</th>
                             <th>End Date</th>
                             <th>Actions</th>
@@ -185,6 +275,17 @@ $positions = mysqli_query(
                         <tr>
                             <td class="position-name"><?= htmlspecialchars($row['position_name']) ?></td>
                             <td class="description-cell"><?= htmlspecialchars($row['description']) ?></td>
+                            <td>
+                                <?php if ($row['region_id']): ?>
+                                    <span class="scope-badge scope-regional">
+                                        🌍 <?= htmlspecialchars($row['region_name']) ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="scope-badge scope-global">
+                                        🌐 Global
+                                    </span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="date-badge">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,6 +334,20 @@ $positions = mysqli_query(
 </div>
 
 <script>
+function selectScope(scope) {
+    document.querySelectorAll('.scope-option').forEach(opt => opt.classList.remove('selected'));
+    document.getElementById('scope_' + scope).parentElement.classList.add('selected');
+    document.getElementById('scope_' + scope).checked = true;
+
+    if (scope === 'regional') {
+        document.getElementById('regionSelectGroup').classList.add('active');
+        document.getElementById('region_id').setAttribute('required', 'required');
+    } else {
+        document.getElementById('regionSelectGroup').classList.remove('active');
+        document.getElementById('region_id').removeAttribute('required');
+    }
+}
+
 function confirmDelete(id, positionName) {
     Swal.fire({
         title: 'Are you sure?',
@@ -245,7 +360,6 @@ function confirmDelete(id, positionName) {
         cancelButtonText: 'Cancel'
     }).then((result) => {
         if (result.isConfirmed) {
-            // CHANGED: Submit as POST form with CSRF token instead of GET link
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = 'delete_position.php';
