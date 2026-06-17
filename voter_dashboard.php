@@ -2,9 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 
-/* ================================================================
-   SESSION TIMEOUT CHECK (30 minutes)
-   ================================================================ */
+/* SESSION TIMEOUT CHECK (30 minutes)*/
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
@@ -21,9 +19,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'voter') {
 
 $user_id = $_SESSION['user_id'];
 
-/* ================================================================
-   FIX: Use prepared statement for fetching voter's region
-   ================================================================ */
+/*FIX: Use prepared statement for fetching voter's region */
 $stmt = mysqli_prepare($conn, "SELECT region_id FROM users WHERE id = ? LIMIT 1");
 mysqli_stmt_bind_param($stmt, "i", $user_id);
 mysqli_stmt_execute($stmt);
