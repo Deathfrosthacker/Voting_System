@@ -5,9 +5,18 @@ require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
+
+/* SESSION TIMEOUT CHECK (30 minutes)*/
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php?timeout=1");
+    exit();
+}
+$_SESSION['last_activity'] = time();
 
 // Get position ID
 if (!isset($_GET['id']) || empty($_GET['id'])) {
@@ -15,11 +24,13 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
     exit();
 }
 
-$position_id = mysqli_real_escape_string($conn, $_GET['id']);
+$position_id = (int)$_GET['id'];
 
-// Fetch position data
-$query = "SELECT * FROM positions WHERE id = '$position_id'";
-$result = mysqli_query($conn, $query);
+// Fetch position data using prepared statement
+$stmt = mysqli_prepare($conn, "SELECT * FROM positions WHERE id = ? LIMIT 1");
+mysqli_stmt_bind_param($stmt, "i", $position_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 
 if (mysqli_num_rows($result) == 0) {
     header("Location: positions.php?status=error");
@@ -28,6 +39,12 @@ if (mysqli_num_rows($result) == 0) {
 
 $position = mysqli_fetch_assoc($result);
 
+// Fetch regions for dropdown
+$regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
+if ($regions === false) {
+    die("Database error fetching regions.");
+}
+
 /*    HANDLE UPDATE POSITION */
 if (isset($_POST['update_position'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -35,8 +52,12 @@ if (isset($_POST['update_position'])) {
     } else {
         $name = mysqli_real_escape_string($conn, $_POST['position_name']);
         $description = mysqli_real_escape_string($conn, $_POST['description']);
-        $start = $_POST['start_date'];
-        $end = $_POST['end_date'];
+        $start = mysqli_real_escape_string($conn, $_POST['start_date']);
+        $end = mysqli_real_escape_string($conn, $_POST['end_date']);
+
+        /*NEW: Handle scope and region changes */
+        $scope = $_POST['scope'] ?? 'global';
+        $new_region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
 
         // FIX 1: Validate dates when editing - prevent past end dates
         $today = date('Y-m-d');
@@ -50,27 +71,36 @@ if (isset($_POST['update_position'])) {
         } elseif ($end < $start) {
             $error_message = "End date must be after or equal to the start date.";
         } else {
-            $sql = "UPDATE positions 
-                    SET position_name = '$name', 
-                        description = '$description', 
-                        start_date = '$start', 
-                        end_date = '$end'
-                    WHERE id = '$position_id'";
-
-            if (mysqli_query($conn, $sql)) {
-                // LOG ACTIVITY
-                $user_id = $_SESSION['user_id'];
-                $activity = "Updated Position: " . $name;
-
-                $log_sql = "INSERT INTO logs (user_id, activity, log_time)
-                            VALUES ('$user_id', '$activity', NOW())";
-
-                mysqli_query($conn, $log_sql);
-
-                header("Location: positions.php?status=updated");
-                exit();
+            /* FIX 2: Check for duplicate name (excluding current record)*/
+            $checkDup = mysqli_prepare($conn, 
+                "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) AND id != ? LIMIT 1"
+            );
+            mysqli_stmt_bind_param($checkDup, "si", $name, $position_id);
+            mysqli_stmt_execute($checkDup);
+            $dupResult = mysqli_stmt_get_result($checkDup);
+            if (mysqli_num_rows($dupResult) > 0) {
+                $error_message = "A position with this name already exists.";
             } else {
-                $error_message = "Error updating position. Please try again.";
+                /* FIX 3: Use prepared statement for UPDATE, include region_id */
+                $updStmt = mysqli_prepare($conn, 
+                    "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = ? WHERE id = ?"
+                );
+                mysqli_stmt_bind_param($updStmt, "ssssii", $name, $description, $start, $end, $new_region_id, $position_id);
+
+                if (mysqli_stmt_execute($updStmt)) {
+                    // LOG ACTIVITY
+                    $user_id = $_SESSION['user_id'];
+                    $activity = "Updated Position: " . $name;
+
+                    $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+                    mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+                    mysqli_stmt_execute($logStmt);
+
+                    header("Location: positions.php?status=updated");
+                    exit();
+                } else {
+                    $error_message = "Error updating position. Please try again.";
+                }
             }
         }
     }
@@ -85,6 +115,23 @@ if (isset($_POST['update_position'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Position - VoteSystem</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .scope-selector {
+            display: flex; gap: 20px; margin-bottom: 16px;
+        }
+        .scope-option {
+            display: flex; align-items: center; gap: 8px;
+            padding: 12px 20px; border: 2px solid #e2e8f0;
+            border-radius: 8px; cursor: pointer; transition: all 0.3s;
+        }
+        .scope-option:hover { border-color: #2563eb; }
+        .scope-option.selected { border-color: #2563eb; background: #eff6ff; }
+        .scope-option input { width: 18px; height: 18px; }
+        .region-select-group {
+            display: none; margin-bottom: 20px;
+        }
+        .region-select-group.active { display: block; }
+    </style>
 </head>
 
 <body>
@@ -110,8 +157,9 @@ if (isset($_POST['update_position'])) {
             </h3>
 
             <?php if (isset($error_message)): ?>
+                <!-- FIX: Escape error message to prevent XSS -->
                 <div style="background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-                    <?= $error_message ?>
+                    <?php echo htmlspecialchars($error_message); ?>
                 </div>
             <?php endif; ?>
 
@@ -119,23 +167,60 @@ if (isset($_POST['update_position'])) {
                 <?php echo csrf_input_field(); ?>
                 <div class="form-group">
                     <label for="position_name">Position Name <span>*</span></label>
-                    <input type="text" id="position_name" name="position_name" value="<?= htmlspecialchars($position['position_name']) ?>" placeholder="e.g., President, Vice President, Secretary" required>
+                    <input type="text" id="position_name" name="position_name" value="<?php echo htmlspecialchars($position['position_name']); ?>" placeholder="e.g., President, Vice President, Secretary" required>
                 </div>
 
                 <div class="form-group">
                     <label for="description">Description <span>*</span></label>
-                    <textarea id="description" name="description" placeholder="Brief description of the position's responsibilities and requirements" required><?= htmlspecialchars($position['description']) ?></textarea>
+                    <textarea id="description" name="description" placeholder="Brief description of the position's responsibilities and requirements" required><?php echo htmlspecialchars($position['description']); ?></textarea>
+                </div>
+
+                <!-- NEW: Scope Selection -->
+                <div class="form-group">
+                    <label>Election Scope <span>*</span></label>
+                    <div class="scope-selector">
+                        <div class="scope-option <?php echo $position['region_id'] ? '' : 'selected'; ?>" onclick="selectScope('global')">
+                            <input type="radio" name="scope" value="global" id="scope_global" <?php echo $position['region_id'] ? '' : 'checked'; ?>>
+                            <label for="scope_global" style="margin:0;cursor:pointer;">
+                                <strong>Global</strong><br>
+                                <small style="color:#64748b;">All voters can see and vote</small>
+                            </label>
+                        </div>
+                        <div class="scope-option <?php echo $position['region_id'] ? 'selected' : ''; ?>" onclick="selectScope('regional')">
+                            <input type="radio" name="scope" value="regional" id="scope_regional" <?php echo $position['region_id'] ? 'checked' : ''; ?>>
+                            <label for="scope_regional" style="margin:0;cursor:pointer;">
+                                <strong>Region-Specific</strong><br>
+                                <small style="color:#64748b;">Only voters from selected region</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Region Selection -->
+                <div class="form-group region-select-group <?php echo $position['region_id'] ? 'active' : ''; ?>" id="regionSelectGroup">
+                    <label for="region_id">Select Region <span>*</span></label>
+                    <select name="region_id" id="region_id">
+                        <option value="">-- Select Region --</option>
+                        <?php 
+                        mysqli_data_seek($regions, 0);
+                        while ($region = mysqli_fetch_assoc($regions)): 
+                        ?>
+                            <option value="<?php echo $region['id']; ?>" <?php echo ($position['region_id'] == $region['id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($region['name']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
                 </div>
 
                 <div class="date-inputs">
                     <div class="form-group">
                         <label for="start_date">Start Date <span>*</span></label>
-                        <input type="date" id="start_date" name="start_date" value="<?= $position['start_date'] ?>" required>
+                        <input type="date" id="start_date" name="start_date" value="<?php echo $position['start_date']; ?>" required>
                     </div>
 
                     <div class="form-group">
                         <label for="end_date">End Date <span>*</span></label>
-                        <input type="date" id="end_date" name="end_date" value="<?= $position['end_date'] ?>" required min="<?= date('Y-m-d'); ?>">
+                        <input type="date" id="end_date" name="end_date" value="<?php echo $position['end_date']; ?>" required min="<?php echo date('Y-m-d'); ?>">
                     </div>
                 </div>
 
@@ -157,6 +242,22 @@ if (isset($_POST['update_position'])) {
         </div>
     </div>
 </div>
+
+<script>
+function selectScope(scope) {
+    document.querySelectorAll('.scope-option').forEach(opt => opt.classList.remove('selected'));
+    document.getElementById('scope_' + scope).parentElement.classList.add('selected');
+    document.getElementById('scope_' + scope).checked = true;
+
+    if (scope === 'regional') {
+        document.getElementById('regionSelectGroup').classList.add('active');
+        document.getElementById('region_id').setAttribute('required', 'required');
+    } else {
+        document.getElementById('regionSelectGroup').classList.remove('active');
+        document.getElementById('region_id').removeAttribute('required');
+    }
+}
+</script>
 
 </body>
 </html>

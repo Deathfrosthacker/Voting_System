@@ -5,9 +5,18 @@ require_once "./csrf_helper.php";  // ADDED: CSRF protection
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
+
+/* SESSION TIMEOUT CHECK (30 minutes) */
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+    session_unset();
+    session_destroy();
+    header("Location: ../login.php?timeout=1");
+    exit();
+}
+$_SESSION['last_activity'] = time();
 
 /*    HANDLE ADD ADMIN */
 if (isset($_POST['add_admin'])) {
@@ -18,26 +27,55 @@ if (isset($_POST['add_admin'])) {
         exit();
     }
 
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);  // CHANGED: student_id → id_number
+    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);
     $name  = mysqli_real_escape_string($conn, $_POST['name']);
     $email = mysqli_real_escape_string($conn, $_POST['email']);
     $role = 'admin';
     $password = $_POST['password'];
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-    $sql = "INSERT INTO users (id_number, name, email, password, role)
-            VALUES ('$id_number', '$name', '$email', '$hashedPassword', '$role')";
+    /* FIX: Check for duplicate id_number and email before inserting */
+    
+    // Check duplicate id_number
+    $checkId = mysqli_prepare($conn, "SELECT id FROM users WHERE id_number = ? LIMIT 1");
+    mysqli_stmt_bind_param($checkId, "s", $id_number);
+    mysqli_stmt_execute($checkId);
+    $idResult = mysqli_stmt_get_result($checkId);
+    if (mysqli_num_rows($idResult) > 0) {
+        header("Location: adminadd.php?status=duplicate_id");
+        exit();
+    }
 
-    if (mysqli_query($conn, $sql)) {
+    // Check duplicate email
+    $checkEmail = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ? LIMIT 1");
+    mysqli_stmt_bind_param($checkEmail, "s", $email);
+    mysqli_stmt_execute($checkEmail);
+    $emailResult = mysqli_stmt_get_result($checkEmail);
+    if (mysqli_num_rows($emailResult) > 0) {
+        header("Location: adminadd.php?status=duplicate_email");
+        exit();
+    }
 
-        // LOG ACTIVITY
+    // Password length validation
+    if (strlen($password) < 8) {
+        header("Location: adminadd.php?status=short_password");
+        exit();
+    }
+
+    /* FIX: Use prepared statement for INSERT */
+    $stmt = mysqli_prepare($conn, 
+        "INSERT INTO users (id_number, name, email, password, role) VALUES (?, ?, ?, ?, ?)"
+    );
+    mysqli_stmt_bind_param($stmt, "sssss", $id_number, $name, $email, $hashedPassword, $role);
+
+    if (mysqli_stmt_execute($stmt)) {
+        // LOG ACTIVITY using prepared statement
         $user_id  = $_SESSION['user_id'];
         $activity = "Added Admin: " . $name;
 
-        $log_sql = "INSERT INTO logs (user_id, activity, log_time)
-                    VALUES ('$user_id', '$activity', NOW())";
-
-        mysqli_query($conn, $log_sql);
+        $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+        mysqli_stmt_execute($logStmt);
 
         header("Location: adminadd.php?status=success");
         exit();
@@ -51,8 +89,11 @@ if (isset($_POST['add_admin'])) {
 /* Fetch all admins */
 $admins = mysqli_query(
     $conn,
-    "SELECT * FROM users WHERE role = 'admin'"
+    "SELECT * FROM users WHERE role = 'admin' ORDER BY created_at DESC"
 );
+if ($admins === false) {
+    die("Database error fetching admins.");
+}
 ?>
 
 <!DOCTYPE html>
@@ -64,46 +105,18 @@ $admins = mysqli_query(
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f8fafc;
             color: #0f172a;
             line-height: 1.6;
         }
-
-        .container {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .main {
-            margin-left: 250px;
-            padding: 40px;
-            overflow-y: auto;
-        }
-
-        .page-header {
-            margin-bottom: 30px;
-        }
-
-        .page-header h1 {
-            font-size: 28px;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 8px;
-        }
-
-        .page-header p {
-            color: #64748b;
-            font-size: 14px;
-        }
-
+        .container { display: flex; min-height: 100vh; }
+        .main { margin-left: 250px; padding: 40px; overflow-y: auto; }
+        .page-header { margin-bottom: 30px; }
+        .page-header h1 { font-size: 28px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+        .page-header p { color: #64748b; font-size: 14px; }
         .card {
             background: #ffffff;
             padding: 30px;
@@ -112,157 +125,57 @@ $admins = mysqli_query(
             margin-bottom: 24px;
             border: 1px solid #e2e8f0;
         }
-
         .card h3 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            font-size: 18px; font-weight: 600; color: #0f172a;
+            margin-bottom: 24px; display: flex; align-items: center; gap: 10px;
         }
-
-        .card h3 svg {
-            width: 24px;
-            height: 24px;
-            color: #2563eb;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
+        .card h3 svg { width: 24px; height: 24px; color: #2563eb; }
+        .form-group { margin-bottom: 20px; }
         .form-group label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #0f172a;
-            margin-bottom: 8px;
+            display: block; font-size: 14px; font-weight: 500;
+            color: #0f172a; margin-bottom: 8px;
         }
-
-        .form-group label span {
-            color: #ef4444;
+        .form-group label span { color: #ef4444; }
+        input[type="text"], input[type="date"], input[type="email"], input[type="password"] {
+            width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0;
+            border-radius: 8px; font-size: 14px; transition: all 0.3s ease;
+            font-family: inherit; background: #ffffff;
         }
-
-        input[type="text"],
-        input[type="date"], input[type="email"],input[type="password"] {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: all 0.3s ease;
-            font-family: inherit;
-            background: #ffffff;
+        input[type="text"]:focus, input[type="date"]:focus, input[type="email"]:focus, input[type="password"]:focus {
+            outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
-
-        input[type="text"]:focus,
-        input[type="date"]:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
         button[type="submit"] {
-            width: 100%;
-            padding: 12px 24px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            margin-top: 8px;
+            width: 100%; padding: 12px 24px; background: #2563eb; color: white;
+            border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.3s ease;
+            display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;
         }
-
         button[type="submit"]:hover {
-            background: #1d4ed8;
-            transform: translateY(-2px);
+            background: #1d4ed8; transform: translateY(-2px);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 16px;
-        }
-
-        thead {
-            background: #f8fafc;
-        }
-
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        thead { background: #f8fafc; }
         th {
-            padding: 14px 16px;
-            text-align: left;
-            font-size: 13px;
-            font-weight: 600;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid #e2e8f0;
+            padding: 14px 16px; text-align: left; font-size: 13px;
+            font-weight: 600; color: #64748b; text-transform: uppercase;
+            letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;
         }
-
-        td {
-            padding: 16px;
-            border-bottom: 1px solid #e2e8f0;
-            color: #0f172a;
-            font-size: 14px;
-        }
-
-        tbody tr {
-            transition: background 0.2s ease;
-        }
-
-        tbody tr:hover {
-            background: #f8fafc;
-        }
-
-        .position-name {
-            font-weight: 600;
-            color: #2563eb;
-        }
-
+        td { padding: 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; }
+        tbody tr { transition: background 0.2s ease; }
+        tbody tr:hover { background: #f8fafc; }
+        .position-name { font-weight: 600; color: #2563eb; }
         .date-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: #e0e7ff;
-            color: #3730a3;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; background: #e0e7ff;
+            color: #3730a3; border-radius: 6px; font-size: 12px; font-weight: 500;
         }
-
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: #64748b;
-        }
-
+        .empty-state { text-align: center; padding: 40px 20px; color: #64748b; }
         @media (max-width: 768px) {
-            .main {
-                padding: 20px;
-            }
-
-            .table-container {
-                overflow-x: scroll;
-            }
-
-            table {
-                min-width: 600px;
-            }
+            .main { padding: 20px; }
+            .table-container { overflow-x: scroll; }
+            table { min-width: 600px; }
         }
     </style>
 </head>
@@ -286,20 +199,20 @@ $admins = mysqli_query(
                 <?php echo csrf_input_field(); ?>
 
                 <div class="form-group">
-                    <label>ID Number</label>  <!-- CHANGED: Student ID → ID Number -->
-                    <input placeholder="Enter ID Number" type="text" name="id_number" required>  <!-- ✅ CHANGED: name="id" → name="id_number" -->
+                    <label>ID Number <span>*</span></label>
+                    <input placeholder="Enter ID Number" type="text" name="id_number" required>
                 </div>
                 <div class="form-group">
-                    <label>Full Name</label>
+                    <label>Full Name <span>*</span></label>
                     <input placeholder="Enter Full Name" type="text" name="name" required>
                 </div>
                 <div class="form-group">
-                    <label>Email Address</label>
+                    <label>Email Address <span>*</span></label>
                     <input placeholder="Enter Email Address" type="email" name="email" required>
                 </div>
                 <div class="form-group">
-                    <label>Password</label>
-                    <input placeholder="8 characters minimum" type="password" name="password" required>
+                    <label>Password <span>*</span> <small style="color:#64748b;">(minimum 8 characters)</small></label>
+                    <input placeholder="8 characters minimum" type="password" name="password" required minlength="8">
                 </div>
 
                 <button type="submit" name="add_admin">
@@ -322,7 +235,7 @@ $admins = mysqli_query(
                 <table>
                     <thead>
                         <tr>
-                            <th>ID Number</th>  <!--  CHANGED: Student ID → ID Number -->
+                            <th>ID Number</th>
                             <th>Name</th>
                             <th>Email</th>
                             <th>Date Added</th>
@@ -331,12 +244,12 @@ $admins = mysqli_query(
                     <tbody>
                         <?php while($row = mysqli_fetch_assoc($admins)): ?>
                         <tr>
-                            <td class="position-name"><?= htmlspecialchars($row['id_number']) ?></td>  <!-- ✅ CHANGED: student_id → id_number -->
-                            <td><?= htmlspecialchars($row['name']) ?></td>
-                            <td><?= htmlspecialchars($row['email']) ?></td>
+                            <td class="position-name"><?php echo htmlspecialchars($row['id_number']); ?></td>
+                            <td><?php echo htmlspecialchars($row['name']); ?></td>
+                            <td><?php echo htmlspecialchars($row['email']); ?></td>
                             <td>
                                 <span class="date-badge">
-                                    <?= date('M d, Y', strtotime($row['created_at'])) ?>
+                                    <?php echo date('M d, Y', strtotime($row['created_at'])); ?>
                                 </span>
                             </td>
                         </tr>
@@ -357,32 +270,40 @@ $admins = mysqli_query(
 <script>
 <?php if ($_GET['status'] === "success"): ?>
     Swal.fire({
-        icon: 'success',
-        title: 'Success!',
+        icon: 'success', title: 'Success!',
         text: 'Admin has been added successfully',
-        confirmButtonColor: '#2563eb',
-        timer: 2000
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'adminadd.php');
-    });
+        confirmButtonColor: '#2563eb', timer: 2000
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
 <?php elseif ($_GET['status'] === "error"): ?>
     Swal.fire({
-        icon: 'error',
-        title: 'Error!',
+        icon: 'error', title: 'Error!',
         text: 'Could not add admin. Please try again.',
         confirmButtonColor: '#ef4444'
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'adminadd.php');
-    });
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
 <?php elseif ($_GET['status'] === "csrf_error"): ?>
     Swal.fire({
-        icon: 'error',
-        title: 'Security Error!',
+        icon: 'error', title: 'Security Error!',
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'adminadd.php');
-    });
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "duplicate_id"): ?>
+    Swal.fire({
+        icon: 'warning', title: 'Duplicate ID Number!',
+        text: 'An admin with this ID number already exists.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "duplicate_email"): ?>
+    Swal.fire({
+        icon: 'warning', title: 'Duplicate Email!',
+        text: 'An admin with this email address already exists.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "short_password"): ?>
+    Swal.fire({
+        icon: 'warning', title: 'Password Too Short!',
+        text: 'Password must be at least 8 characters long.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
 <?php endif; ?>
 </script>
 <?php endif; ?>

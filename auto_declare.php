@@ -5,6 +5,16 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once "./config/connection.php";
 
+/* Session timeout check */
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+    session_unset();
+    session_destroy();
+    exit();
+}
+if (isset($_SESSION['user_id'])) {
+    $_SESSION['last_activity'] = time();
+}
+
 /*    CREATE RESULTS TABLE */
 $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -14,7 +24,9 @@ $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     end_date DATE NOT NULL,
     declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )";
-mysqli_query($conn, $createTable);
+if (mysqli_query($conn, $createTable) === false) {
+    error_log("auto_declare: Failed to create election_results table: " . mysqli_error($conn));
+}
 
 /*    FIND EXPIRED ELECTIONS */
 $expired = mysqli_query($conn, "
@@ -25,64 +37,80 @@ $expired = mysqli_query($conn, "
           SELECT position_name FROM election_results
       )
 ");
+if ($expired === false) {
+    error_log("auto_declare: Failed to fetch expired elections: " . mysqli_error($conn));
+    exit();
+}
 
 /*    PROCESS EACH EXPIRED */
 while ($pos = mysqli_fetch_assoc($expired)) {
 
     $pos_id   = (int)$pos['id'];
-    $pos_name = mysqli_real_escape_string($conn, $pos['position_name']);
+    $pos_name = $pos['position_name'];
     $end_date = $pos['end_date'];
 
-    /* Find winner */
-    $winnerQ = mysqli_query($conn, "
+    /* Find winner using prepared statement */
+    $winnerStmt = mysqli_prepare($conn, "
         SELECT c.id, c.name, COUNT(v.id) AS vote_count
         FROM candidates c
         LEFT JOIN votes v ON c.id = v.candidate_id
-        WHERE c.position = '$pos_name'
+        WHERE c.position = ?
         GROUP BY c.id
         ORDER BY vote_count DESC, c.id ASC
         LIMIT 1
     ");
+    mysqli_stmt_bind_param($winnerStmt, "s", $pos_name);
+    mysqli_stmt_execute($winnerStmt);
+    $winnerQ = mysqli_stmt_get_result($winnerStmt);
 
-    if ($winner = mysqli_fetch_assoc($winnerQ)) {
-        $winner_name = mysqli_real_escape_string($conn, $winner['name']);
+    if ($winnerQ && $winner = mysqli_fetch_assoc($winnerQ)) {
+        $winner_name = $winner['name'];
         $vote_count  = (int)$winner['vote_count'];
 
-        /* Save result */
-        mysqli_query($conn, "
-            INSERT INTO election_results
-                (position_name, winner_name, total_votes, end_date)
-            VALUES
-                ('$pos_name', '$winner_name', $vote_count, '$end_date')
-        ");
+        /* Save result using prepared statement */
+        $saveStmt = mysqli_prepare($conn, 
+            "INSERT INTO election_results (position_name, winner_name, total_votes, end_date) VALUES (?, ?, ?, ?)"
+        );
+        mysqli_stmt_bind_param($saveStmt, "ssis", $pos_name, $winner_name, $vote_count, $end_date);
 
-        /* Delete votes for this position */
-        mysqli_query($conn, "
-            DELETE v FROM votes v
-            JOIN candidates c ON v.candidate_id = c.id
-            WHERE c.position = '$pos_name'
-        ");
-
-        /* Delete candidates */
-        mysqli_query($conn, "
-            DELETE FROM candidates WHERE position = '$pos_name'
-        ");
-
-        /* Delete position */
-        mysqli_query($conn, "
-            DELETE FROM positions WHERE id = $pos_id
-        ");
-
-        /* Log */
-        if (isset($_SESSION['user_id'])) {
-            $uid = (int)$_SESSION['user_id'];
-            $act = mysqli_real_escape_string($conn,
-                "Auto-declared winner: $winner_name for $pos_name ($vote_count votes)"
-            );
-            mysqli_query($conn, "
-                INSERT INTO logs (user_id, activity, log_time)
-                VALUES ($uid, '$act', NOW())
+        if (mysqli_stmt_execute($saveStmt)) {
+            /* Delete votes for this position */
+            $delVotes = mysqli_prepare($conn, "
+                DELETE v FROM votes v
+                JOIN candidates c ON v.candidate_id = c.id
+                WHERE c.position = ?
             ");
+            if ($delVotes) {
+                mysqli_stmt_bind_param($delVotes, "s", $pos_name);
+                mysqli_stmt_execute($delVotes);
+            }
+
+            /* Delete candidates */
+            $delCand = mysqli_prepare($conn, "DELETE FROM candidates WHERE position = ?");
+            if ($delCand) {
+                mysqli_stmt_bind_param($delCand, "s", $pos_name);
+                mysqli_stmt_execute($delCand);
+            }
+
+            /* Delete position */
+            $delPos = mysqli_prepare($conn, "DELETE FROM positions WHERE id = ?");
+            if ($delPos) {
+                mysqli_stmt_bind_param($delPos, "i", $pos_id);
+                mysqli_stmt_execute($delPos);
+            }
+
+            /* Log */
+            if (isset($_SESSION['user_id'])) {
+                $uid = (int)$_SESSION['user_id'];
+                $act = "Auto-declared winner: $winner_name for $pos_name ($vote_count votes)";
+                $logStmt = mysqli_prepare($conn, 
+                    "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
+                );
+                if ($logStmt) {
+                    mysqli_stmt_bind_param($logStmt, "is", $uid, $act);
+                    mysqli_stmt_execute($logStmt);
+                }
+            }
         }
     }
 }

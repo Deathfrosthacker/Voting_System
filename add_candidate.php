@@ -5,9 +5,18 @@ require_once "./csrf_helper.php";
 
 // Security
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
+
+/* SESSION TIMEOUT CHECK (30 minutes) */
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+    session_unset();
+    session_destroy();
+    header("Location: ../login.php?timeout=1");
+    exit();
+}
+$_SESSION['last_activity'] = time();
 
 $candidates = mysqli_query(
     $conn,
@@ -16,15 +25,24 @@ $candidates = mysqli_query(
      LEFT JOIN affiliations a ON c.affiliation_id = a.id 
      ORDER BY c.start_date DESC"
 );
+if ($candidates === false) {
+    die("Database error fetching candidates.");
+}
 
 // Fetch positions
 $positions = mysqli_query(
     $conn,
     "SELECT * FROM positions ORDER BY start_date DESC"
 );
+if ($positions === false) {
+    die("Database error fetching positions.");
+}
 
 // Fetch affiliations for dropdown
 $affiliations = mysqli_query($conn, "SELECT id, name, color_code FROM affiliations ORDER BY name ASC");
+if ($affiliations === false) {
+    die("Database error fetching affiliations.");
+}
 
 // Handle candidate insert
 if (isset($_POST['add_candidate'])) {
@@ -35,37 +53,44 @@ if (isset($_POST['add_candidate'])) {
     }
 
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
-    $position       = $_POST['position_name'];
-    $start_date     = $_POST['start_date'];
-    $end_date       = $_POST['end_date'];
+    // FIX 1: Escape the position variable to prevent SQL injection
+    $position       = mysqli_real_escape_string($conn, $_POST['position_name']);
+    $start_date     = mysqli_real_escape_string($conn, $_POST['start_date']);
+    $end_date       = mysqli_real_escape_string($conn, $_POST['end_date']);
     $is_independent = isset($_POST['is_independent']) ? 1 : 0;
     $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
 
-    // FIX 2: Check for similar candidate names (case-insensitive, fuzzy matching)
+    /* FIX 2: Validate that the position actually exists in positions table */
+    $checkPos = mysqli_query($conn, "SELECT id FROM positions WHERE position_name = '$position' LIMIT 1");
+    if ($checkPos === false || mysqli_num_rows($checkPos) == 0) {
+        header("Location: add_candidate.php?status=invalid_position");
+        exit();
+    }
+
+    // FIX 3: Check for similar candidate names (case-insensitive, fuzzy matching)
+    // IMPROVED: Reduced threshold from 80% to 90% to reduce false positives
     $normalized_input = strtolower(trim($candidate_name));
-    $normalized_input = preg_replace('/[^a-z0-9]/', '', $normalized_input); // Remove special chars and spaces
+    $normalized_input = preg_replace('/[^a-z0-9]/', '', $normalized_input);
 
     $check_similar = mysqli_query($conn, "SELECT name FROM candidates WHERE position = '$position'");
     $similar_found = false;
     $similar_name = "";
 
-    while ($existing = mysqli_fetch_assoc($check_similar)) {
-        $existing_normalized = strtolower(trim($existing['name']));
-        $existing_normalized = preg_replace('/[^a-z0-9]/', '', $existing_normalized);
+    if ($check_similar !== false) {
+        while ($existing = mysqli_fetch_assoc($check_similar)) {
+            $existing_normalized = strtolower(trim($existing['name']));
+            $existing_normalized = preg_replace('/[^a-z0-9]/', '', $existing_normalized);
 
-        // Check if names are identical or very similar (80% match or more)
-        similar_text($normalized_input, $existing_normalized, $percent);
+            // Check if names are identical (exact match)
+            if ($normalized_input === $existing_normalized) {
+                $similar_found = true;
+                $similar_name = $existing['name'];
+                break;
+            }
 
-        if ($normalized_input === $existing_normalized || $percent >= 80) {
-            $similar_found = true;
-            $similar_name = $existing['name'];
-            break;
-        }
-
-        // Also check if one contains the other (e.g., "John" vs "John Doe")
-        if (strpos($normalized_input, $existing_normalized) !== false || 
-            strpos($existing_normalized, $normalized_input) !== false) {
-            if (strlen($normalized_input) > 3 && strlen($existing_normalized) > 3) {
+            // Check similarity with INCREASED threshold (90% instead of 80%)
+            similar_text($normalized_input, $existing_normalized, $percent);
+            if ($percent >= 90) {
                 $similar_found = true;
                 $similar_name = $existing['name'];
                 break;
@@ -78,22 +103,30 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    $sql = "INSERT INTO candidates 
-            (name, position, start_date, end_date, is_independent, affiliation_id)
-            VALUES 
-            ('$candidate_name', '$position', '$start_date', '$end_date', $is_independent, " . 
-            ($affiliation_id ? "'$affiliation_id'" : "NULL") . ")";
+    /*FIX 4: Use prepared statement for INSERT to prevent SQL injection */
+    $stmt = mysqli_prepare($conn, 
+        "INSERT INTO candidates (name, position, start_date, end_date, is_independent, affiliation_id)
+         VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    if ($stmt === false) {
+        header("Location: add_candidate.php?status=error");
+        exit();
+    }
+    
+    mysqli_stmt_bind_param($stmt, "sssssi", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
 
-    if (mysqli_query($conn, $sql)) {
-        // Log activity
+    if (mysqli_stmt_execute($stmt)) {
+        // Log activity using prepared statement
         $user_id  = $_SESSION['user_id'];
         $activity = "Added Candidate";
 
-        mysqli_query(
-            $conn,
-            "INSERT INTO logs (user_id, activity, log_time)
-             VALUES ('$user_id', '$activity', NOW())"
+        $logStmt = mysqli_prepare($conn, 
+            "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
         );
+        if ($logStmt) {
+            mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+            mysqli_stmt_execute($logStmt);
+        }
 
         $status = "success";
     } else {
@@ -167,7 +200,7 @@ if (isset($_POST['add_candidate'])) {
             <div class="positions-grid">
                 <?php while ($pos = mysqli_fetch_assoc($positions)): ?>
                     <div class="position-card" onclick="openForm(
-                        '<?php echo htmlspecialchars($pos['position_name']); ?>',
+                        '<?php echo htmlspecialchars($pos['position_name'], ENT_QUOTES); ?>',
                         '<?php echo $pos['start_date']; ?>',
                         '<?php echo $pos['end_date']; ?>'
                     )">
@@ -260,7 +293,7 @@ if (isset($_POST['add_candidate'])) {
                                     <?php echo htmlspecialchars($row['affiliation_name']); ?>
                                 </span>
                             <?php else: ?>
-                                <span style="color: #94a3b8;">—</span>
+                                <span style="color: #94a3b8;">&mdash;</span>
                             <?php endif; ?>
                         </td>
                         <td><?php echo date('M d, Y', strtotime($row['start_date'])); ?></td>
@@ -321,6 +354,13 @@ function toggleAffiliation() {
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
     });
+<?php elseif ($status === "invalid_position"): ?>
+    Swal.fire({
+        icon: 'error',
+        title: 'Invalid Position!',
+        text: 'The selected position does not exist in the system.',
+        confirmButtonColor: '#ef4444'
+    });
 <?php elseif ($status === "error"): ?>
     Swal.fire({
         icon: 'error',
@@ -337,7 +377,7 @@ function toggleAffiliation() {
     Swal.fire({
         icon: 'warning',
         title: 'Similar Name Found!',
-        text: 'A candidate with a similar name ("<?php echo htmlspecialchars($_GET['similar'] ?? ''); ?>") already exists for this position. Please use a different name.',
+        text: 'A candidate with a similar name ("<?php echo htmlspecialchars($_GET['similar'] ?? '', ENT_QUOTES); ?>") already exists for this position. Please use a different name.',
         confirmButtonColor: '#f59e0b'
     }).then(() => {
         window.history.replaceState({}, document.title, 'add_candidate.php');

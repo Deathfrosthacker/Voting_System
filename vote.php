@@ -3,9 +3,18 @@ session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 
+/* SESSION TIMEOUT CHECK (30 minutes) */
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php?timeout=1");
+    exit();
+}
+$_SESSION['last_activity'] = time();
+
 /* AUTH PROTECTION */
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
 
@@ -17,6 +26,7 @@ if (!isset($_GET['position'])) {
     die("Invalid position");
 }
 
+// Escape position for use in legacy queries (prepared statements used for critical ops)
 $position = mysqli_real_escape_string($conn, $_GET['position']);
 
 /*FETCH POSITION DETAILS */
@@ -28,11 +38,35 @@ $posQuery = mysqli_query($conn, "
     LIMIT 1
 ");
 
-if (mysqli_num_rows($posQuery) === 0) {
+if ($posQuery === false || mysqli_num_rows($posQuery) === 0) {
     die("Position not found");
 }
 
 $pos = mysqli_fetch_assoc($posQuery);
+
+/* FIX 1: Check if election is currently active (within date range) */
+$today = date('Y-m-d');
+if ($today < $pos['start_date'] || $today > $pos['end_date']) {
+    die("This election is not active at this time. Voting is only allowed between " . 
+        date('M d, Y', strtotime($pos['start_date'])) . " and " . 
+        date('M d, Y', strtotime($pos['end_date'])) . ".");
+}
+
+/* FIX 2: Validate voter's region eligibility for regional elections */
+if ($pos['region_id'] !== null) {
+    // Fetch voter's region
+    $voterQuery = mysqli_prepare($conn, "SELECT region_id FROM users WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($voterQuery, "i", $user_id);
+    mysqli_stmt_execute($voterQuery);
+    $voterResult = mysqli_stmt_get_result($voterQuery);
+    $voterData = mysqli_fetch_assoc($voterResult);
+    $voter_region_id = $voterData['region_id'] ?? null;
+
+    // If position is regional, voter must belong to that region
+    if ($pos['region_id'] != $voter_region_id) {
+        die("You are not eligible to vote in this region-specific election. This election is only open to voters from: " . htmlspecialchars($pos['region_name']) . ".");
+    }
+}
 
 /* CHECK IF ALREADY VOTED */
 $checkVoted = mysqli_prepare($conn, "
@@ -73,7 +107,11 @@ if (isset($_POST['vote']) && !$hasVoted) {
                 $status = "error";
                 $error_msg = "Candidate does not belong to this position.";
             } else {
-                // Double-check user hasn't voted for this position
+                /* FIX 3: Atomic vote insertion with UNIQUE constraint handling
+                   The votes table should have: UNIQUE KEY unique_vote (user_id, position_name)
+                */
+                
+                // Re-check eligibility at insert time (defense in depth against race conditions)
                 $doubleCheck = mysqli_prepare($conn, "
                     SELECT COUNT(*) as count 
                     FROM votes v 
@@ -112,8 +150,14 @@ if (isset($_POST['vote']) && !$hasVoted) {
                         header("Location: vote.php?position=" . urlencode($position) . "&voted=1");
                         exit();
                     } else {
-                        $status = "error";
-                        $error_msg = "Database error: " . mysqli_error($conn);
+                        // Check if error is due to duplicate entry (race condition caught by DB)
+                        if (mysqli_errno($conn) == 1062) {
+                            $status = "error";
+                            $error_msg = "You have already voted for this position.";
+                        } else {
+                            $status = "error";
+                            $error_msg = "Database error. Please try again.";
+                        }
                     }
                 }
             }
@@ -121,15 +165,18 @@ if (isset($_POST['vote']) && !$hasVoted) {
     }
 }
 
-/* FETCH CANDIDATES with affiliation info */
-$candidates = mysqli_query($conn, "
+/* FIX 4: Use prepared statement for fetching candidates */
+$candStmt = mysqli_prepare($conn, "
     SELECT c.id, c.name, c.is_independent, 
            a.name as affiliation_name, a.color_code
     FROM candidates c
     LEFT JOIN affiliations a ON c.affiliation_id = a.id
-    WHERE c.position = '$position'
+    WHERE c.position = ?
     ORDER BY c.name ASC
 ");
+mysqli_stmt_bind_param($candStmt, "s", $position);
+mysqli_stmt_execute($candStmt);
+$candidates = mysqli_stmt_get_result($candStmt);
 ?>
 
 <!DOCTYPE html>
@@ -191,13 +238,13 @@ $candidates = mysqli_query($conn, "
 
     <!-- BACK BUTTON -->
     <a href="voter_dashboard.php" class="back-btn">
-        ← Back to Dashboard
+        &larr; Back to Dashboard
     </a>
 
     <!-- HEADER -->
     <div class="header-card">
         <h1>
-            🗳️ <?php echo htmlspecialchars($pos['position_name']); ?>
+            &#128499; <?php echo htmlspecialchars($pos['position_name']); ?>
         </h1>
 
         <?php if (!empty($pos['description'])): ?>
@@ -209,24 +256,24 @@ $candidates = mysqli_query($conn, "
         <!-- Scope Info -->
         <?php if ($pos['region_id']): ?>
             <div class="scope-info">
-                🌍 This is a <strong>region-specific</strong> election for: <?php echo htmlspecialchars($pos['region_name']); ?>
+                &#127757; This is a <strong>region-specific</strong> election for: <?php echo htmlspecialchars($pos['region_name']); ?>
             </div>
         <?php else: ?>
             <div class="scope-info" style="background: #eff6ff; border-color: #bfdbfe; color: #1e40af;">
-                🌐 This is a <strong>global</strong> election open to all voters
+                &#127760; This is a <strong>global</strong> election open to all voters
             </div>
         <?php endif; ?>
 
         <div class="date-range">
-            📅 <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
-            → <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
+            &#128197; <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
+            &rarr; <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
         </div>
     </div>
 
     <!-- SUCCESS MESSAGE -->
     <?php if (isset($_GET['voted']) && $_GET['voted'] == 1): ?>
         <div class="alert alert-success">
-            <span class="alert-icon">✅</span>
+            <span class="alert-icon">&#9989;</span>
             <div>
                 <strong>Vote Submitted Successfully!</strong>
                 <p style="margin-top: 4px; font-size: 14px;">Your vote has been recorded.</p>
@@ -237,11 +284,11 @@ $candidates = mysqli_query($conn, "
     <!-- ALREADY VOTED ALERT -->
     <?php if ($hasVoted): ?>
         <div class="alert alert-voted">
-            <span class="alert-icon">ℹ️</span>
+            <span class="alert-icon">&#8505;&#65039;</span>
             <div>
                 <strong>You have already voted for this position</strong>
                 <p style="margin-top: 4px; font-size: 14px;">
-                    Voted on <?php echo date('M d, Y 	 g:i A', strtotime($voteInfo['vote_time'])); ?>
+                    Voted on <?php echo date('M d, Y g:i A', strtotime($voteInfo['vote_time'])); ?>
                 </p>
             </div>
         </div>
@@ -250,7 +297,7 @@ $candidates = mysqli_query($conn, "
     <!-- ERROR MESSAGE -->
     <?php if ($status === "error"): ?>
         <div class="alert alert-error">
-            <span class="alert-icon">❌</span>
+            <span class="alert-icon">&#10060;</span>
             <div>
                 <strong>Error submitting vote</strong>
                 <p style="margin-top: 4px; font-size: 14px;">
@@ -274,14 +321,14 @@ $candidates = mysqli_query($conn, "
                         <div class="candidate-name">
                             <?php echo htmlspecialchars($cand['name']); ?>
                             <?php if ($isVotedFor): ?>
-                                <span class="voted-badge">✓ Your Vote</span>
+                                <span class="voted-badge">&#10003; Your Vote</span>
                             <?php endif; ?>
                         </div>
 
                         <!-- Affiliation Badge -->
                         <?php if ($cand['is_independent']): ?>
                             <span class="affiliation-badge independent-badge">
-                                ⚪ Independent Candidate
+                                &#9898; Independent Candidate
                             </span>
                         <?php elseif ($cand['affiliation_name']): ?>
                             <span class="affiliation-badge party-badge" 

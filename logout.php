@@ -2,23 +2,20 @@
 session_start();
 require_once "./config/connection.php";
 
-/* Log logout activity (optional but professional) */
+// Log the logout activity if user was logged in
 if (isset($_SESSION['user_id'])) {
-    $user_id  = $_SESSION['user_id'];
+    $user_id = (int)$_SESSION['user_id'];
     $activity = "Logged out";
-
-    // FIXED: Changed column names to match schema (user_id, activity, log_time)
-    mysqli_query(
-        $conn,
-        "INSERT INTO logs (user_id, activity, log_time)
-         VALUES ('$user_id', '$activity', NOW())"
-    );
+    $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+    if ($logStmt) {
+        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+        mysqli_stmt_execute($logStmt);
+    }
 }
 
-/* Destroy session */
 session_unset();
 session_destroy();
 
-/* Redirect to login */
 header("Location: login.php");
 exit();
+?>

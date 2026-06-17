@@ -4,181 +4,74 @@
     <meta charset="UTF-8">
     <title>User Registration | Voting System</title>
     <style>
-        * {
-            box-sizing: border-box;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
+        * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
         body {
-            margin: 0;
-            min-height: 100vh;
-            background: #f3f4f6;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            margin: 0; min-height: 100vh; background: #f3f4f6;
+            display: flex; align-items: center; justify-content: center;
         }
-
         .main-container {
-            width: 100%;
-            height: 800px;
-            background: white;
-            display: flex;
-            border-radius: 12px;
-            overflow: hidden;
+            width: 100%; height: 800px; background: white;
+            display: flex; border-radius: 12px; overflow: hidden;
             box-shadow: 0 15px 35px rgba(0,0,0,0.15);
         }
-
-        /* LEFT IMAGE SECTION */
         .image-section {
             flex: 1;
             background: url('./images/vote2.jpg')
                         center/cover no-repeat;
             position: relative;
         }
-
         .image-overlay {
-            position: absolute;
-            inset: 0;
+            position: absolute; inset: 0;
             background: rgba(30, 64, 175, 0.75);
-            color: white;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            color: white; padding: 40px;
+            display: flex; flex-direction: column; justify-content: center;
         }
-
-        .image-overlay h1 {
-            font-size: 32px;
-            margin-bottom: 15px;
-        }
-
-        .image-overlay p {
-            font-size: 16px;
-            line-height: 1.6;
-            opacity: 0.9;
-        }
-
-        /* RIGHT FORM SECTION */
+        .image-overlay h1 { font-size: 32px; margin-bottom: 15px; }
+        .image-overlay p { font-size: 16px; line-height: 1.6; opacity: 0.9; }
         .form-section {
-            flex: 1;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            flex: 1; padding: 40px;
+            display: flex; flex-direction: column; justify-content: center;
             overflow-y: auto;
         }
-
-        .form-section h2 {
-            color: #1e40af;
-            margin-bottom: 8px;
+        .form-section h2 { color: #1e40af; margin-bottom: 8px; }
+        .form-section p { color: #6b7280; font-size: 14px; margin-bottom: 25px; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 14px; margin-bottom: 6px; color: #374151; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 12px; border-radius: 6px;
+            border: 1px solid #d1d5db; font-size: 14px; background: white;
         }
-
-        .form-section p {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 25px;
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: #2563eb;
         }
-
-        .form-group {
-            margin-bottom: 14px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 14px;
-            margin-bottom: 6px;
-            color: #374151;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #d1d5db;
-            font-size: 14px;
-            background: white;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #2563eb;
-        }
-
         .btn-register {
-            width: 100%;
-            background: #1e40af;
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 15px;
-            cursor: pointer;
-            margin-top: 10px;
+            width: 100%; background: #1e40af; color: white; border: none;
+            padding: 12px; border-radius: 6px; font-size: 15px;
+            cursor: pointer; margin-top: 10px;
         }
-
-        .btn-register:hover {
-            background: #1d4ed8;
-        }
-
-        .login-link {
-            text-align: center;
-            margin-top: 18px;
-            font-size: 14px;
-        }
-
-        .login-link a {
-            color: #2563eb;
-            text-decoration: none;
-            font-weight: 600;
-        }
-         header {
-            background: #1e40af;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-
-        header h1 {
-            font-size: 32px;
-        }
-
-        header p {
-            margin-top: 10px;
-            font-size: 16px;
-            opacity: 0.9;
-        }
-
-
-        /* RESPONSIVE */
+        .btn-register:hover { background: #1d4ed8; }
+        .login-link { text-align: center; margin-top: 18px; font-size: 14px; }
+        .login-link a { color: #2563eb; text-decoration: none; font-weight: 600; }
         @media (max-width: 768px) {
-            .main-container {
-                flex-direction: column;
-                height: auto;
-            }
-
-            .image-section {
-                display: none;
-            }
-
-            .form-section {
-                padding: 30px;
-            }
+            .main-container { flex-direction: column; height: auto; }
+            .image-section { display: none; }
+            .form-section { padding: 30px; }
         }
     </style>
 </head>
-
 <body>
 
 <?php
 require_once "./config/connection.php";
+require_once "./csrf_helper.php";
 // Fetch regions for dropdown
 $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
+if ($regions === false) {
+    die("Database error fetching regions.");
+}
 ?>
 
 <div class="main-container">
-
     <!-- LEFT IMAGE -->
     <div class="image-section">
         <div class="image-overlay">
@@ -196,9 +89,15 @@ $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC")
         <p>Register to participate in the voting process</p>
 
         <form action="registerdb.php" method="POST">
+            <!-- ADDED: CSRF token for defense in depth -->
+            <?php 
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            echo csrf_input_field(); 
+            ?>
+
             <div class="form-group">
                 <label>ID Number</label>
-                <input placeholder="Enter your ID Number" type="text" name="id" required>
+                <input placeholder="Enter your ID Number" type="text" name="id" required pattern="[0-9]+" title="Please enter numbers only">
             </div>
             <div class="form-group">
                 <label>Full Name</label>
@@ -210,7 +109,7 @@ $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC")
                 <input placeholder="Enter your Email Address" type="email" name="email" required>
             </div>
 
-            <!-- NEW: Region Selection (IEBC County equivalent) -->
+            <!-- Region Selection -->
             <div class="form-group">
                 <label>Region / Campus / Chapter <span style="color:#6b7280;font-size:12px;">(Select your institutional location)</span></label>
                 <select name="region_id" required>
@@ -229,7 +128,6 @@ $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC")
                 <input type="date" name="date_of_birth" id="date_of_birth" required max="">
             </div>
 
-
             <div class="form-group">
                 <label>Password</label>
                 <input placeholder="8 characters minimum" type="password" name="password" required minlength="8">
@@ -237,7 +135,7 @@ $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC")
 
             <div class="form-group">
                 <label>Confirm Password</label>
-                <input placeholder="Confirm Password" type="password" name="confirm_password" required>
+                <input placeholder="Confirm Password" type="password" name="confirm_password" required minlength="8">
             </div>
 
             <button type="submit" class="btn-register">Register</button>
@@ -248,7 +146,6 @@ $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC")
             <a href="login.php">Login</a>
         </div>
     </div>
-
 </div>
 
 <script>
