@@ -1,11 +1,11 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./csrf_helper.php";  // ADDED: CSRF protection
+require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: ../login.php");
     exit();
 }
 
@@ -13,86 +13,101 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
-    header("Location: login.php?timeout=1");
+    header("Location: ../login.php?timeout=1");
     exit();
 }
 $_SESSION['last_activity'] = time();
 
-/*    HANDLE ADD ADMIN */
-if (isset($_POST['add_admin'])) {
+/*    HANDLE ADD POSITION */
+if (isset($_POST['add_position'])) {
 
-    // ADDED: CSRF validation
+    //ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-        header("Location: adminadd.php?status=csrf_error");
+        header("Location: positions.php?status=csrf_error");
         exit();
     }
 
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);
-    $name  = mysqli_real_escape_string($conn, $_POST['name']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $role = 'admin';
-    $password = $_POST['password'];
-    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+    $name  = mysqli_real_escape_string($conn, $_POST['position_name']);
+    $description  = mysqli_real_escape_string($conn, $_POST['description']);
+    $start = mysqli_real_escape_string($conn, $_POST['start_date']);
+    $end   = mysqli_real_escape_string($conn, $_POST['end_date']);
 
-    /* FIX: Check for duplicate id_number and email before inserting */
-    
-    // Check duplicate id_number
-    $checkId = mysqli_prepare($conn, "SELECT id FROM users WHERE id_number = ? LIMIT 1");
-    mysqli_stmt_bind_param($checkId, "s", $id_number);
-    mysqli_stmt_execute($checkId);
-    $idResult = mysqli_stmt_get_result($checkId);
-    if (mysqli_num_rows($idResult) > 0) {
-        header("Location: adminadd.php?status=duplicate_id");
+    // NEW: Region scope
+    $scope = $_POST['scope'] ?? 'global';
+    $region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
+
+    // FIX 1: Validate dates - prevent past dates
+    $today = date('Y-m-d');
+
+    if ($start < $today) {
+        header("Location: positions.php?status=past_start_date");
         exit();
     }
 
-    // Check duplicate email
-    $checkEmail = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ? LIMIT 1");
-    mysqli_stmt_bind_param($checkEmail, "s", $email);
-    mysqli_stmt_execute($checkEmail);
-    $emailResult = mysqli_stmt_get_result($checkEmail);
-    if (mysqli_num_rows($emailResult) > 0) {
-        header("Location: adminadd.php?status=duplicate_email");
+    if ($end < $today) {
+        header("Location: positions.php?status=past_end_date");
         exit();
     }
 
-    // Password length validation
-    if (strlen($password) < 8) {
-        header("Location: adminadd.php?status=short_password");
+    if ($end < $start) {
+        header("Location: positions.php?status=invalid_date_range");
         exit();
     }
 
-    /* FIX: Use prepared statement for INSERT */
+    /* FIX 2: Check for duplicate position name (case-insensitive) */
+    $checkDup = mysqli_prepare($conn, "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) LIMIT 1");
+    mysqli_stmt_bind_param($checkDup, "s", $name);
+    mysqli_stmt_execute($checkDup);
+    $dupResult = mysqli_stmt_get_result($checkDup);
+    if (mysqli_num_rows($dupResult) > 0) {
+        header("Location: positions.php?status=duplicate_name");
+        exit();
+    }
+
+    /* FIX 3: Use prepared statement for INSERT*/
     $stmt = mysqli_prepare($conn, 
-        "INSERT INTO users (id_number, name, email, password, role) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, ?)"
     );
-    mysqli_stmt_bind_param($stmt, "sssss", $id_number, $name, $email, $hashedPassword, $role);
+    
+    $regionIdParam = $region_id;
+    mysqli_stmt_bind_param($stmt, "ssssi", $name, $description, $start, $end, $regionIdParam);
 
     if (mysqli_stmt_execute($stmt)) {
         // LOG ACTIVITY using prepared statement
         $user_id  = $_SESSION['user_id'];
-        $activity = "Added Admin: " . $name;
+        $activity = "Made Position";
 
         $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
         mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
         mysqli_stmt_execute($logStmt);
 
-        header("Location: adminadd.php?status=success");
+        //REDIRECT to prevent form resubmission
+        header("Location: positions.php?status=success");
         exit();
 
     } else {
-        header("Location: adminadd.php?status=error");
+        //REDIRECT with error
+        header("Location: positions.php?status=error");
         exit();
     }
 }
 
-/* Fetch all admins */
-$admins = mysqli_query(
+/* Fetch all positions with region info */
+$positions = mysqli_query(
     $conn,
-    "SELECT * FROM users WHERE role = 'admin' ORDER BY created_at DESC"
+    "SELECT p.*, r.name as region_name 
+     FROM positions p 
+     LEFT JOIN regions r ON p.region_id = r.id 
+     ORDER BY p.start_date DESC"
 );
-if ($admins === false) {
-    die("Database error fetching admins.");
+if ($positions === false) {
+    die("Database error fetching positions.");
+}
+
+/* Fetch regions for dropdown */
+$regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
+if ($regions === false) {
+    die("Database error fetching regions.");
 }
 ?>
 
@@ -100,82 +115,60 @@ if ($admins === false) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="stylesheet" href="positions2.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Admins - VoteSystem</title>
+    <title>Manage Positions - VoteSystem</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f8fafc;
-            color: #0f172a;
-            line-height: 1.6;
+        .scope-selector {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 16px;
         }
-        .container { display: flex; min-height: 100vh; }
-        .main { margin-left: 250px; padding: 40px; overflow-y: auto; }
-        .page-header { margin-bottom: 30px; }
-        .page-header h1 { font-size: 28px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
-        .page-header p { color: #64748b; font-size: 14px; }
-        .card {
-            background: #ffffff;
-            padding: 30px;
+        .scope-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .scope-option:hover {
+            border-color: #2563eb;
+        }
+        .scope-option.selected {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .scope-option input {
+            width: 18px;
+            height: 18px;
+        }
+        .region-select-group {
+            display: none;
+            margin-bottom: 20px;
+        }
+        .region-select-group.active {
+            display: block;
+        }
+        .scope-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
             border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            margin-bottom: 24px;
-            border: 1px solid #e2e8f0;
+            font-size: 12px;
+            font-weight: 600;
         }
-        .card h3 {
-            font-size: 18px; font-weight: 600; color: #0f172a;
-            margin-bottom: 24px; display: flex; align-items: center; gap: 10px;
+        .scope-global {
+            background: #dbeafe;
+            color: #1e40af;
         }
-        .card h3 svg { width: 24px; height: 24px; color: #2563eb; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label {
-            display: block; font-size: 14px; font-weight: 500;
-            color: #0f172a; margin-bottom: 8px;
-        }
-        .form-group label span { color: #ef4444; }
-        input[type="text"], input[type="date"], input[type="email"], input[type="password"] {
-            width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0;
-            border-radius: 8px; font-size: 14px; transition: all 0.3s ease;
-            font-family: inherit; background: #ffffff;
-        }
-        input[type="text"]:focus, input[type="date"]:focus, input[type="email"]:focus, input[type="password"]:focus {
-            outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-        button[type="submit"] {
-            width: 100%; padding: 12px 24px; background: #2563eb; color: white;
-            border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
-            cursor: pointer; transition: all 0.3s ease;
-            display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;
-        }
-        button[type="submit"]:hover {
-            background: #1d4ed8; transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        thead { background: #f8fafc; }
-        th {
-            padding: 14px 16px; text-align: left; font-size: 13px;
-            font-weight: 600; color: #64748b; text-transform: uppercase;
-            letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;
-        }
-        td { padding: 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; }
-        tbody tr { transition: background 0.2s ease; }
-        tbody tr:hover { background: #f8fafc; }
-        .position-name { font-weight: 600; color: #2563eb; }
-        .date-badge {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 10px; background: #e0e7ff;
-            color: #3730a3; border-radius: 6px; font-size: 12px; font-weight: 500;
-        }
-        .empty-state { text-align: center; padding: 40px 20px; color: #64748b; }
-        @media (max-width: 768px) {
-            .main { padding: 20px; }
-            .table-container { overflow-x: scroll; }
-            table { min-width: 600px; }
+        .scope-regional {
+            background: #d1fae5;
+            color: #065f46;
         }
     </style>
 </head>
@@ -183,74 +176,173 @@ if ($admins === false) {
 <body>
 
 <div class="container">
+    <!-- Sidebar -->
     <?php include "./sidebar.php"; ?>
 
+    <!-- Main Content -->
     <div class="main">
+        <div class="page-header">
+            <h1>Manage Positions</h1>
+            <p>Create and manage voting positions for elections</p>
+        </div>
 
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h4>Total Positions</h4>
+                <div class="value"><?php echo mysqli_num_rows($positions); ?></div>
+                <div class="label">Active positions in system</div>
+            </div>
+        </div>
+
+        <!-- Add Position Form -->
         <div class="card">
             <h3>
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
-                Add New Admin
+                Add New Position
             </h3>
+
             <form method="POST">
-                <!-- ADDED: CSRF token field -->
+                <!--ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
 
                 <div class="form-group">
-                    <label>ID Number <span>*</span></label>
-                    <input placeholder="Enter ID Number" type="text" name="id_number" required>
-                </div>
-                <div class="form-group">
-                    <label>Full Name <span>*</span></label>
-                    <input placeholder="Enter Full Name" type="text" name="name" required>
-                </div>
-                <div class="form-group">
-                    <label>Email Address <span>*</span></label>
-                    <input placeholder="Enter Email Address" type="email" name="email" required>
-                </div>
-                <div class="form-group">
-                    <label>Password <span>*</span> <small style="color:#64748b;">(minimum 8 characters)</small></label>
-                    <input placeholder="8 characters minimum" type="password" name="password" required minlength="8">
+                    <label for="position_name">Position Name <span>*</span></label>
+                    <input type="text" id="position_name" name="position_name" placeholder="e.g., President, Vice President, Secretary" required>
                 </div>
 
-                <button type="submit" name="add_admin">
+                <div class="form-group">
+                    <label for="description">Description <span>*</span></label>
+                    <textarea id="description" name="description" placeholder="Brief description of the position's responsibilities and requirements" required></textarea>
+                </div>
+
+                <!-- NEW: Scope Selection -->
+                <div class="form-group">
+                    <label>Election Scope <span>*</span></label>
+                    <div class="scope-selector">
+                        <div class="scope-option selected" onclick="selectScope('global')">
+                            <input type="radio" name="scope" value="global" id="scope_global" checked>
+                            <label for="scope_global" style="margin:0;cursor:pointer;">
+                                <strong>Global</strong><br>
+                                <small style="color:#64748b;">All voters can see and vote</small>
+                            </label>
+                        </div>
+                        <div class="scope-option" onclick="selectScope('regional')">
+                            <input type="radio" name="scope" value="regional" id="scope_regional">
+                            <label for="scope_regional" style="margin:0;cursor:pointer;">
+                                <strong>Region-Specific</strong><br>
+                                <small style="color:#64748b;">Only voters from selected region</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Region Selection (shown only when regional selected) -->
+                <div class="form-group region-select-group" id="regionSelectGroup">
+                    <label for="region_id">Select Region <span>*</span></label>
+                    <select name="region_id" id="region_id">
+                        <option value="">-- Select Region --</option>
+                        <?php while ($region = mysqli_fetch_assoc($regions)): ?>
+                            <option value="<?php echo $region['id']; ?>">
+                                <?php echo htmlspecialchars($region['name']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <div class="date-inputs">
+                    <div class="form-group">
+                        <label for="start_date">Start Date <span>*</span></label>
+                        <input type="date" id="start_date" name="start_date" required min="<?php echo date('Y-m-d'); ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="end_date">End Date <span>*</span></label>
+                        <input type="date" id="end_date" name="end_date" required min="<?php echo date('Y-m-d'); ?>">
+                    </div>
+                </div>
+
+                <button type="submit" name="add_position">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
-                    Add Admin
+                    Add Position
                 </button>
             </form>
         </div>
 
+        <!-- Positions Table -->
         <div class="card">
-            <h3>Current Admins</h3>
+            <h3>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                All Positions
+            </h3>
 
             <?php 
-            mysqli_data_seek($admins, 0);
-            if(mysqli_num_rows($admins) > 0): 
+            mysqli_data_seek($positions, 0); // Reset pointer
+            if(mysqli_num_rows($positions) > 0): 
             ?>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>ID Number</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Date Added</th>
+                            <th>Position</th>
+                            <th>Description</th>
+                            <th>Scope</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while($row = mysqli_fetch_assoc($admins)): ?>
+                        <?php while($row = mysqli_fetch_assoc($positions)): ?>
                         <tr>
-                            <td class="position-name"><?php echo htmlspecialchars($row['id_number']); ?></td>
-                            <td><?php echo htmlspecialchars($row['name']); ?></td>
-                            <td><?php echo htmlspecialchars($row['email']); ?></td>
+                            <td class="position-name"><?php echo htmlspecialchars($row['position_name']); ?></td>
+                            <td class="description-cell"><?php echo htmlspecialchars($row['description']); ?></td>
+                            <td>
+                                <?php if ($row['region_id']): ?>
+                                    <span class="scope-badge scope-regional">
+                                        &#127757; <?php echo htmlspecialchars($row['region_name']); ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="scope-badge scope-global">
+                                        &#127760; Global
+                                    </span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="date-badge">
-                                    <?php echo date('M d, Y', strtotime($row['created_at'])); ?>
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <?php echo date('M d, Y', strtotime($row['start_date'])); ?>
                                 </span>
+                            </td>
+                            <td>
+                                <span class="date-badge">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <?php echo date('M d, Y', strtotime($row['end_date'])); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="edit_position.php?id=<?php echo $row['id']; ?>" class="btn-edit" title="Edit">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </a>
+                                    <button onclick="confirmDelete(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['position_name'], ENT_QUOTES); ?>')" class="btn-delete" title="Delete">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         <?php endwhile; ?>
@@ -259,53 +351,202 @@ if ($admins === false) {
             </div>
             <?php else: ?>
             <div class="empty-state">
-                <p>No admins added yet. Create your first admin above.</p>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                <p>No positions added yet. Create your first position above.</p>
             </div>
             <?php endif; ?>
         </div>
     </div>
 </div>
 
+<script>
+function selectScope(scope) {
+    document.querySelectorAll('.scope-option').forEach(opt => opt.classList.remove('selected'));
+    document.getElementById('scope_' + scope).parentElement.classList.add('selected');
+    document.getElementById('scope_' + scope).checked = true;
+
+    if (scope === 'regional') {
+        document.getElementById('regionSelectGroup').classList.add('active');
+        document.getElementById('region_id').setAttribute('required', 'required');
+    } else {
+        document.getElementById('regionSelectGroup').classList.remove('active');
+        document.getElementById('region_id').removeAttribute('required');
+    }
+}
+
+function confirmDelete(id, positionName) {
+    Swal.fire({
+        title: 'Are you sure?',
+        html: `You are about to delete: <strong>${positionName}</strong>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'delete_position.php';
+
+            const idInput = document.createElement('input');
+            idInput.type = 'hidden';
+            idInput.name = 'id';
+            idInput.value = id;
+            form.appendChild(idInput);
+
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '<?php echo generate_csrf_token(); ?>';
+            form.appendChild(csrfInput);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+}
+</script>
+
 <?php if (isset($_GET['status'])): ?>
 <script>
 <?php if ($_GET['status'] === "success"): ?>
     Swal.fire({
-        icon: 'success', title: 'Success!',
-        text: 'Admin has been added successfully',
-        confirmButtonColor: '#2563eb', timer: 2000
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+        icon: 'success',
+        title: 'Success!',
+        text: 'Position has been created successfully',
+        confirmButtonColor: '#2563eb',
+        timer: 2000
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
 <?php elseif ($_GET['status'] === "error"): ?>
     Swal.fire({
-        icon: 'error', title: 'Error!',
-        text: 'Could not add admin. Please try again.',
+        icon: 'error',
+        title: 'Error!',
+        text: 'Could not add position. Please try again.',
         confirmButtonColor: '#ef4444'
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "updated"): ?>
+    Swal.fire({
+        icon: 'success',
+        title: 'Updated!',
+        text: 'Position has been updated successfully',
+        confirmButtonColor: '#2563eb',
+        timer: 2000
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "deleted"): ?>
+    Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Position has been deleted successfully',
+        confirmButtonColor: '#2563eb',
+        timer: 2000
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
 <?php elseif ($_GET['status'] === "csrf_error"): ?>
     Swal.fire({
-        icon: 'error', title: 'Security Error!',
+        icon: 'error',
+        title: 'Security Error!',
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
-<?php elseif ($_GET['status'] === "duplicate_id"): ?>
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "past_start_date"): ?>
     Swal.fire({
-        icon: 'warning', title: 'Duplicate ID Number!',
-        text: 'An admin with this ID number already exists.',
+        icon: 'warning',
+        title: 'Invalid Start Date!',
+        text: 'Start date cannot be in the past. Please select today or a future date.',
         confirmButtonColor: '#f59e0b'
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
-<?php elseif ($_GET['status'] === "duplicate_email"): ?>
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "past_end_date"): ?>
     Swal.fire({
-        icon: 'warning', title: 'Duplicate Email!',
-        text: 'An admin with this email address already exists.',
+        icon: 'warning',
+        title: 'Invalid End Date!',
+        text: 'End date cannot be in the past. Please select today or a future date.',
         confirmButtonColor: '#f59e0b'
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
-<?php elseif ($_GET['status'] === "short_password"): ?>
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "invalid_date_range"): ?>
     Swal.fire({
-        icon: 'warning', title: 'Password Too Short!',
-        text: 'Password must be at least 8 characters long.',
+        icon: 'warning',
+        title: 'Invalid Date Range!',
+        text: 'End date must be after or equal to the start date.',
         confirmButtonColor: '#f59e0b'
-    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "duplicate_name"): ?>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Duplicate Position Name!',
+        text: 'A position with this name already exists. Please use a different name.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
 <?php endif; ?>
 </script>
 <?php endif; ?>
+
+<style>
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.btn-edit,
+.btn-delete {
+    padding: 6px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-edit {
+    background: #3b82f6;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-edit:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+}
+
+.btn-delete {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-delete:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.btn-edit svg,
+.btn-delete svg {
+    width: 18px;
+    height: 18px;
+}
+</style>
+
 </body>
 </html>
