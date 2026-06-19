@@ -54,10 +54,53 @@ if (isset($_POST['add_candidate'])) {
 
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
     $position       = $_POST['position_name'];
-    $start_date     = $_POST['start_date'];
-    $end_date       = $_POST['end_date'];
+ $start_date = $_POST['start_date'];
+$end_date   = $_POST['end_date'];
+
+$today = date('Y-m-d');
+
+// Validate dates
+if (
+    strtotime($start_date) === false ||
+    strtotime($end_date) === false
+) {
+    header("Location: add_candidate.php?status=invalid_date");
+    exit();
+}
+
+// Start date cannot be in the past
+if ($start_date < $today) {
+    header("Location: add_candidate.php?status=start_date_past");
+    exit();
+}
+
+// End date must be after start date
+if ($end_date <= $start_date) {
+    header("Location: add_candidate.php?status=invalid_date_range");
+    exit();
+}
     $is_independent = isset($_POST['is_independent']) ? 1 : 0;
     $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
+
+    // Candidate name validation
+if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $candidate_name)) {
+    header("Location: add_candidate.php?status=invalid_name");
+    exit();
+}
+
+// Date validation
+if (
+    strtotime($start_date) === false ||
+    strtotime($end_date) === false
+) {
+    header("Location: add_candidate.php?status=invalid_date");
+    exit();
+}
+
+if (strtotime($start_date) > strtotime($end_date)) {
+    header("Location: add_candidate.php?status=invalid_date_range");
+    exit();
+}
 
     /* FIX 1: Validate that the position actually exists using prepared statement */
     $checkPos = mysqli_prepare($conn, "SELECT id FROM positions WHERE position_name = ? LIMIT 1");
@@ -110,42 +153,74 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    /*FIX 3: Use prepared statement for INSERT */
-    $stmt = mysqli_prepare($conn, 
-        "INSERT INTO candidates (name, position, start_date, end_date, is_independent, affiliation_id)
-         VALUES (?, ?, ?, ?, ?, ?)"
-    );
-    if ($stmt === false) {
-        header("Location: add_candidate.php?status=error");
+    /* FIX 3: Use prepared statement for INSERT */
+$stmt = mysqli_prepare(
+    $conn,
+    "INSERT INTO candidates
+    (name, position, start_date, end_date, is_independent, affiliation_id)
+    VALUES (?, ?, ?, ?, ?, ?)"
+);
+
+if ($stmt === false) {
+    header("Location: add_candidate.php?status=error");
+    exit();
+}
+
+mysqli_stmt_bind_param(
+    $stmt,
+    "ssssii",
+    $candidate_name,
+    $position,
+    $start_date,
+    $end_date,
+    $is_independent,
+    $affiliation_id
+);
+
+if (!mysqli_stmt_execute($stmt)) {
+
+    if (mysqli_errno($conn) == 1062) {
+        header(
+            "Location: add_candidate.php?status=duplicate_candidate"
+        );
         exit();
     }
-    
-    /* FIX: Handle NULL for affiliation_id properly */
-    if ($affiliation_id === null) {
-        mysqli_stmt_bind_param($stmt, "ssssii", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
-    } else {
-        mysqli_stmt_bind_param($stmt, "ssssii", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
-    }
 
-    if (mysqli_stmt_execute($stmt)) {
-        // Log activity using prepared statement
-        $user_id  = $_SESSION['user_id'];
-        $activity = "Added Candidate";
+    error_log(mysqli_error($conn));
 
-        $logStmt = mysqli_prepare($conn, 
-            "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
-        );
-        if ($logStmt) {
-            mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
-            mysqli_stmt_execute($logStmt);
-        }
-
-        $status = "success";
-    } else {
-        $status = "error";
-    }
+    header(
+        "Location: add_candidate.php?status=error"
+    );
+    exit();
 }
-?>
+
+/* Candidate inserted successfully */
+
+// Log activity
+$user_id = $_SESSION['user_id'];
+$activity = "Added Candidate";
+
+$logStmt = mysqli_prepare(
+    $conn,
+    "INSERT INTO logs (user_id, activity, log_time)
+     VALUES (?, ?, NOW())"
+);
+
+if ($logStmt) {
+    mysqli_stmt_bind_param(
+        $logStmt,
+        "is",
+        $user_id,
+        $activity
+    );
+
+    mysqli_stmt_execute($logStmt);
+    mysqli_stmt_close($logStmt);
+}
+
+mysqli_stmt_close($stmt);
+$status = "success";
+}?>
 
 <!DOCTYPE html>
 <html lang="en">

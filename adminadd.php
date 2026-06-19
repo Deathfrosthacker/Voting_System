@@ -26,10 +26,6 @@ if (isset($_POST['add_admin'])) {
         header("Location: adminadd.php?status=csrf_error");
         exit();
     }
-
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id_number']);
-    $name  = mysqli_real_escape_string($conn, $_POST['name']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
     $role = 'admin';
     $password = $_POST['password'];
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
@@ -38,7 +34,24 @@ if (isset($_POST['add_admin'])) {
     
     // Check duplicate id_number
     $checkId = mysqli_prepare($conn, "SELECT id FROM users WHERE id_number = ? LIMIT 1");
-    mysqli_stmt_bind_param($checkId, "s", $id_number);
+    $id_number = trim($_POST['id_number']);
+    // Basic validation for ID number (only digits, length between 6 and 12)
+    if (!preg_match('/^[0-9]{6,12}$/', $id_number)) {
+    header("Location: adminadd.php?status=invalid_id");
+    exit();
+}
+    $name = trim($_POST['name']);
+    // Basic validation for name (only letters, spaces, and certain punctuation)
+    if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $name)) {
+    header("Location: adminadd.php?status=invalid_name");
+    exit();
+}
+    $email = trim($_POST['email']);
+    // Basic email format validation
+   if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    header("Location: adminadd.php?status=invalid_email");
+    exit();
+}
     mysqli_stmt_execute($checkId);
     $idResult = mysqli_stmt_get_result($checkId);
     if (mysqli_num_rows($idResult) > 0) {
