@@ -1,6 +1,4 @@
-/* =====================
-   VOTES PAGE STYLES
-===================== */
+/* VOTES PAGE STYLES */
 
 * {
     margin: 0;
@@ -21,9 +19,7 @@ body {
     max-width: 1400px;
 }
 
-/* =====================
-   HEADER SECTION
-===================== */
+/*  HEADER SECTION */
 .main h2 {
     font-size: 2rem;
     font-weight: 700;
@@ -40,9 +36,7 @@ body {
     margin-bottom: 2rem;
 }
 
-/* =====================
-   POSITION CARDS
-===================== */
+/*POSITION CARDS*/
 .position-card {
     background: white;
     border-radius: 12px;
@@ -58,9 +52,7 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* =====================
-   POSITION HEADER
-===================== */
+/* POSITION HEADER */
 .position-header {
     background: linear-gradient(135deg, #667eea 0%, #21386b 100%);
     padding: 1.5rem 2rem;
@@ -89,9 +81,7 @@ body {
     gap: 0.5rem;
 }
 
-/* =====================
-   TABLE STYLES
-===================== */
+/* TABLE STYLES */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -128,18 +118,14 @@ td:first-child {
     color: #0f172a;
 }
 
-/* =====================
-   VOTE COUNT BADGE
-===================== */
+/* VOTE COUNT BADGE */
 .count {
     font-weight: 700;
     font-size: 1.25rem;
     color: #667eea;
 }
 
-/* =====================
-   VOTERS LIST
-===================== */
+/* VOTERS LIST*/
 td ul {
     list-style: none;
     margin: 0;
@@ -169,9 +155,7 @@ td em {
 }
 
 
-/* =====================
-   ANONYMOUS VOTER LIST
-===================== */
+/*ANONYMOUS VOTER LIST */
 td ul li {
     font-size: 0.85rem;
     color: #64748b;
@@ -182,9 +166,7 @@ td ul li strong {
     font-weight: 500;
 }
 
-/* =====================
-   RESPONSIVE DESIGN
-===================== */
+/*RESPONSIVE DESIGN */
 @media (max-width: 768px) {
     .main {
         margin-left: 0;
@@ -222,9 +204,7 @@ td ul li strong {
     }
 }
 
-/* =====================
-   EMPTY STATE
-===================== */
+/* EMPTY STATE */
 .empty-state {
     text-align: center;
     padding: 3rem 2rem;
@@ -237,9 +217,7 @@ td ul li strong {
     font-weight: 500;
 }
 
-/* =====================
-   LOADING ANIMATION
-===================== */
+/* LOADING ANIMATION*/
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -255,9 +233,7 @@ td ul li strong {
     animation: fadeIn 0.3s ease-out;
 }
 
-/* =====================
-   ACCESSIBILITY
-===================== */
+/* ACCESSIBILITY */
 .position-card:focus-within {
     outline: 2px solid #667eea;
     outline-offset: 2px;
