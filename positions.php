@@ -5,7 +5,7 @@ require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
 
@@ -13,7 +13,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
-    header("Location: ../login.php?timeout=1");
+    header("Location: login.php?timeout=1");
     exit();
 }
 $_SESSION['last_activity'] = time();
@@ -29,8 +29,8 @@ if (isset($_POST['add_position'])) {
 
     $name  = mysqli_real_escape_string($conn, $_POST['position_name']);
     $description  = mysqli_real_escape_string($conn, $_POST['description']);
-    $start = mysqli_real_escape_string($conn, $_POST['start_date']);
-    $end   = mysqli_real_escape_string($conn, $_POST['end_date']);
+    $start = $_POST['start_date'];
+    $end   = $_POST['end_date'];
 
     // NEW: Region scope
     $scope = $_POST['scope'] ?? 'global';
@@ -64,14 +64,19 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    /* FIX 3: Use prepared statement for INSERT*/
-    $stmt = mysqli_prepare($conn, 
-        "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, ?)"
-    );
+    /* FIX 3: Use prepared statement for INSERT with proper NULL handling */
+    if ($region_id === null) {
+        $stmt = mysqli_prepare($conn, 
+            "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, NULL)"
+        );
+        mysqli_stmt_bind_param($stmt, "ssss", $name, $description, $start, $end);
+    } else {
+        $stmt = mysqli_prepare($conn, 
+            "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, ?)"
+        );
+        mysqli_stmt_bind_param($stmt, "ssssi", $name, $description, $start, $end, $region_id);
+    }
     
-    $regionIdParam = $region_id;
-    mysqli_stmt_bind_param($stmt, "ssssi", $name, $description, $start, $end, $regionIdParam);
-
     if (mysqli_stmt_execute($stmt)) {
         // LOG ACTIVITY using prepared statement
         $user_id  = $_SESSION['user_id'];

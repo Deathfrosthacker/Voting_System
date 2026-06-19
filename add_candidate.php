@@ -13,7 +13,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
-    header("Location: ../login.php?timeout=1");
+    header("Location: login.php?timeout=1");
     exit();
 }
 $_SESSION['last_activity'] = time();
@@ -53,26 +53,33 @@ if (isset($_POST['add_candidate'])) {
     }
 
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
-    // FIX 1: Escape the position variable to prevent SQL injection
-    $position       = mysqli_real_escape_string($conn, $_POST['position_name']);
-    $start_date     = mysqli_real_escape_string($conn, $_POST['start_date']);
-    $end_date       = mysqli_real_escape_string($conn, $_POST['end_date']);
+    $position       = $_POST['position_name'];
+    $start_date     = $_POST['start_date'];
+    $end_date       = $_POST['end_date'];
     $is_independent = isset($_POST['is_independent']) ? 1 : 0;
     $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
 
-    /* FIX 2: Validate that the position actually exists in positions table */
-    $checkPos = mysqli_query($conn, "SELECT id FROM positions WHERE position_name = '$position' LIMIT 1");
-    if ($checkPos === false || mysqli_num_rows($checkPos) == 0) {
+    /* FIX 1: Validate that the position actually exists using prepared statement */
+    $checkPos = mysqli_prepare($conn, "SELECT id FROM positions WHERE position_name = ? LIMIT 1");
+    mysqli_stmt_bind_param($checkPos, "s", $position);
+    mysqli_stmt_execute($checkPos);
+    $checkPosResult = mysqli_stmt_get_result($checkPos);
+    
+    if ($checkPosResult === false || mysqli_num_rows($checkPosResult) == 0) {
         header("Location: add_candidate.php?status=invalid_position");
         exit();
     }
 
-    // FIX 3: Check for similar candidate names (case-insensitive, fuzzy matching)
-    // IMPROVED: Reduced threshold from 80% to 90% to reduce false positives
+    // FIX 2: Check for similar candidate names using prepared statement (case-insensitive, fuzzy matching)
     $normalized_input = strtolower(trim($candidate_name));
     $normalized_input = preg_replace('/[^a-z0-9]/', '', $normalized_input);
 
-    $check_similar = mysqli_query($conn, "SELECT name FROM candidates WHERE position = '$position'");
+    /* FIX: Use prepared statement to fetch existing candidates for this position */
+    $checkStmt = mysqli_prepare($conn, "SELECT name FROM candidates WHERE position = ?");
+    mysqli_stmt_bind_param($checkStmt, "s", $position);
+    mysqli_stmt_execute($checkStmt);
+    $check_similar = mysqli_stmt_get_result($checkStmt);
+    
     $similar_found = false;
     $similar_name = "";
 
@@ -103,7 +110,7 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    /*FIX 4: Use prepared statement for INSERT to prevent SQL injection */
+    /*FIX 3: Use prepared statement for INSERT */
     $stmt = mysqli_prepare($conn, 
         "INSERT INTO candidates (name, position, start_date, end_date, is_independent, affiliation_id)
          VALUES (?, ?, ?, ?, ?, ?)"
@@ -113,7 +120,12 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
     
-    mysqli_stmt_bind_param($stmt, "sssssi", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
+    /* FIX: Handle NULL for affiliation_id properly */
+    if ($affiliation_id === null) {
+        mysqli_stmt_bind_param($stmt, "ssssii", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
+    } else {
+        mysqli_stmt_bind_param($stmt, "ssssii", $candidate_name, $position, $start_date, $end_date, $is_independent, $affiliation_id);
+    }
 
     if (mysqli_stmt_execute($stmt)) {
         // Log activity using prepared statement

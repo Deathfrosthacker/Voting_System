@@ -6,7 +6,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name  = mysqli_real_escape_string($conn, $_POST['name']);
     $email = mysqli_real_escape_string($conn, $_POST['email']);
     $date_of_birth = $_POST['date_of_birth'];
-    $county = mysqli_real_escape_string($conn, $_POST['county'] ?? '');
+    /* FIX: Use region_id from the form instead of county (which doesn't exist in form) */
+    $region_id = !empty($_POST['region_id']) ? (int)$_POST['region_id'] : null;
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
 
@@ -61,11 +62,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             // Hash password
                             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-                            /* FIX 2: Use prepared statement for INSERT (prevents SQL injection) */
+                            /* FIX 2: Use prepared statement for INSERT with region_id instead of county */
                             $stmt = mysqli_prepare($conn, 
-                                "INSERT INTO users (id_number, name, email, date_of_birth, county, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                                "INSERT INTO users (id_number, name, email, date_of_birth, region_id, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)"
                             );
-                            mysqli_stmt_bind_param($stmt, "sssssss", $id_number, $name, $email, $date_of_birth, $county, $hashedPassword, $role);
+                            /* FIX: Bind region_id as integer (can be NULL) */
+                            mysqli_stmt_bind_param($stmt, "ssssiss", $id_number, $name, $email, $date_of_birth, $region_id, $hashedPassword, $role);
 
                             if (mysqli_stmt_execute($stmt)) {
                                 $status = "success";

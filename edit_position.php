@@ -52,8 +52,8 @@ if (isset($_POST['update_position'])) {
     } else {
         $name = mysqli_real_escape_string($conn, $_POST['position_name']);
         $description = mysqli_real_escape_string($conn, $_POST['description']);
-        $start = mysqli_real_escape_string($conn, $_POST['start_date']);
-        $end = mysqli_real_escape_string($conn, $_POST['end_date']);
+        $start = $_POST['start_date'];
+        $end = $_POST['end_date'];
 
         /*NEW: Handle scope and region changes */
         $scope = $_POST['scope'] ?? 'global';
@@ -81,11 +81,18 @@ if (isset($_POST['update_position'])) {
             if (mysqli_num_rows($dupResult) > 0) {
                 $error_message = "A position with this name already exists.";
             } else {
-                /* FIX 3: Use prepared statement for UPDATE, include region_id */
-                $updStmt = mysqli_prepare($conn, 
-                    "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = ? WHERE id = ?"
-                );
-                mysqli_stmt_bind_param($updStmt, "ssssii", $name, $description, $start, $end, $new_region_id, $position_id);
+                /* FIX 3: Use prepared statement for UPDATE with proper NULL handling */
+                if ($new_region_id === null) {
+                    $updStmt = mysqli_prepare($conn, 
+                        "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = NULL WHERE id = ?"
+                    );
+                    mysqli_stmt_bind_param($updStmt, "ssssi", $name, $description, $start, $end, $position_id);
+                } else {
+                    $updStmt = mysqli_prepare($conn, 
+                        "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = ? WHERE id = ?"
+                    );
+                    mysqli_stmt_bind_param($updStmt, "ssssii", $name, $description, $start, $end, $new_region_id, $position_id);
+                }
 
                 if (mysqli_stmt_execute($updStmt)) {
                     // LOG ACTIVITY

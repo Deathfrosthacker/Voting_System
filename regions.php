@@ -5,7 +5,7 @@ require_once "./csrf_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+    header("Location: login.php");
     exit();
 }
 
@@ -19,18 +19,30 @@ if (isset($_POST['add_region'])) {
     $name = mysqli_real_escape_string($conn, $_POST['region_name']);
     $description = mysqli_real_escape_string($conn, $_POST['description'] ?? '');
 
-    // Check for duplicate region name
-    $check = mysqli_query($conn, "SELECT id FROM regions WHERE name = '$name'");
-    if (mysqli_num_rows($check) > 0) {
+    /* FIX: Use prepared statement to prevent SQL injection */
+    $check = mysqli_prepare($conn, "SELECT id FROM regions WHERE name = ?");
+    mysqli_stmt_bind_param($check, "s", $name);
+    mysqli_stmt_execute($check);
+    $checkResult = mysqli_stmt_get_result($check);
+    
+    if (mysqli_num_rows($checkResult) > 0) {
         header("Location: regions.php?status=duplicate");
         exit();
     }
 
-    $sql = "INSERT INTO regions (name, description) VALUES ('$name', '$description')";
-    if (mysqli_query($conn, $sql)) {
+    /* FIX: Use prepared statement for INSERT */
+    $stmt = mysqli_prepare($conn, "INSERT INTO regions (name, description) VALUES (?, ?)");
+    mysqli_stmt_bind_param($stmt, "ss", $name, $description);
+    
+    if (mysqli_stmt_execute($stmt)) {
         $user_id = $_SESSION['user_id'];
         $activity = "Added Region: " . $name;
-        mysqli_query($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES ('$user_id', '$activity', NOW())");
+        
+        /* FIX: Use prepared statement for log insert */
+        $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+        mysqli_stmt_execute($logStmt);
+        
         header("Location: regions.php?status=success");
         exit();
     } else {
@@ -46,13 +58,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_region'])) {
         exit();
     }
 
-    $region_id = mysqli_real_escape_string($conn, $_POST['region_id']);
+    /* FIX: Cast to integer instead of escaping */
+    $region_id = (int)$_POST['region_id'];
 
-    // Check if region has voters or positions assigned
-    $checkVoters = mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE region_id = '$region_id'");
-    $checkPositions = mysqli_query($conn, "SELECT COUNT(*) as total FROM positions WHERE region_id = '$region_id'");
-
+    /* FIX: Use prepared statements for checks */
+    $voterStmt = mysqli_prepare($conn, "SELECT COUNT(*) as total FROM users WHERE region_id = ?");
+    mysqli_stmt_bind_param($voterStmt, "i", $region_id);
+    mysqli_stmt_execute($voterStmt);
+    $checkVoters = mysqli_stmt_get_result($voterStmt);
     $voterCount = mysqli_fetch_assoc($checkVoters)['total'];
+
+    $posStmt = mysqli_prepare($conn, "SELECT COUNT(*) as total FROM positions WHERE region_id = ?");
+    mysqli_stmt_bind_param($posStmt, "i", $region_id);
+    mysqli_stmt_execute($posStmt);
+    $checkPositions = mysqli_stmt_get_result($posStmt);
     $positionCount = mysqli_fetch_assoc($checkPositions)['total'];
 
     if ($voterCount > 0 || $positionCount > 0) {
@@ -60,12 +79,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_region'])) {
         exit();
     }
 
-    $regionName = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name FROM regions WHERE id = '$region_id'"))['name'];
+    /* FIX: Use prepared statement to get name */
+    $nameStmt = mysqli_prepare($conn, "SELECT name FROM regions WHERE id = ?");
+    mysqli_stmt_bind_param($nameStmt, "i", $region_id);
+    mysqli_stmt_execute($nameStmt);
+    $nameResult = mysqli_stmt_get_result($nameStmt);
+    $regionName = mysqli_fetch_assoc($nameResult)['name'] ?? '';
 
-    if (mysqli_query($conn, "DELETE FROM regions WHERE id = '$region_id'")) {
+    /* FIX: Use prepared statement for DELETE */
+    $delStmt = mysqli_prepare($conn, "DELETE FROM regions WHERE id = ?");
+    mysqli_stmt_bind_param($delStmt, "i", $region_id);
+    
+    if (mysqli_stmt_execute($delStmt)) {
         $user_id = $_SESSION['user_id'];
         $activity = "Deleted Region: " . $regionName;
-        mysqli_query($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES ('$user_id', '$activity', NOW())");
+        
+        /* FIX: Use prepared statement for log insert */
+        $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+        mysqli_stmt_execute($logStmt);
+        
         header("Location: regions.php?status=deleted");
         exit();
     } else {
