@@ -4,11 +4,17 @@ require_once "./config/connection.php";
 require_once "./auto_declare.php";
 
 /* Simple admin protection */
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+if (
+    isset($_SESSION['last_activity']) &&
+    (time() - $_SESSION['last_activity'] > 1800)
+) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php?timeout=1");
     exit();
 }
 
+$_SESSION['last_activity'] = time();
 $resultsQuery = "
     SELECT position_name, winner_name, total_votes, end_date
     FROM election_results
@@ -31,10 +37,26 @@ if ($logsResult === false) {
     $logsError = "Error fetching logs: " . mysqli_error($conn);
 }
 
+//Helper function to get count of records in a table
+function getCount($conn, $table)
+{
+    $result = mysqli_query(
+        $conn,
+        "SELECT COUNT(*) AS total FROM $table"
+    );
+
+    if (!$result) {
+        error_log(mysqli_error($conn));
+        return 0;
+    }
+
+    return mysqli_fetch_assoc($result)['total'];
+}
+
 /* Fetch statistics */
-$totalPositions = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions"))['total'];
-$totalCandidates = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM candidates"))['total'];
-$totalVotes = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS total FROM votes"))['total'];
+$totalPositions = getCount($conn, 'positions');
+$totalCandidates = getCount($conn, 'candidates');
+$totalVotes = getCount($conn, 'votes');
 
 /* Latest Position */
 $latestPosition = mysqli_query(
@@ -614,3 +636,13 @@ $latestCandidate = mysqli_query(
 
 </body>
 </html>
+<?php 
+//close connections and free results
+if ($logsResult && mysqli_num_rows($logsResult) > 0) {
+    mysqli_free_result($logsResult);
+    mysqli_free_result($resultsResult);
+    mysqli_free_result($latestPosition);
+    mysqli_free_result($latestCandidate);
+    mysqli_close($conn);
+} ?>
+?>

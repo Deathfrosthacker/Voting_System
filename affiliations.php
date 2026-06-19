@@ -16,28 +16,62 @@ if (isset($_POST['add_affiliation'])) {
         exit();
     }
 
-    $name = mysqli_real_escape_string($conn, $_POST['affiliation_name']);
-    $description = mysqli_real_escape_string($conn, $_POST['description'] ?? '');
-    $color_code = mysqli_real_escape_string($conn, $_POST['color_code'] ?? '#2563eb');
+    $$name = trim($_POST['affiliation_name']);
+    if (!preg_match("/^[a-zA-Z0-9\s&.,'-]{3,100}$/", $name)) {
+    header("Location: affiliations.php?status=invalid_name");
+    exit();
+}
+    $description = trim($_POST['description'] ?? '');
+    $color_code = trim($_POST['color_code'] ?? '#2563eb');
 
     // Check for duplicate name
-    $check = mysqli_query($conn, "SELECT id FROM affiliations WHERE name = '$name'");
-    if (mysqli_num_rows($check) > 0) {
+   $check = mysqli_prepare(
+    $conn,
+    "SELECT id FROM affiliations WHERE name = ? LIMIT 1"
+    );
+
+    mysqli_stmt_bind_param($check, "s", $name);
+    mysqli_stmt_execute($check);
+
+    $result = mysqli_stmt_get_result($check);
+
+    if (mysqli_num_rows($result) > 0) {
+        mysqli_stmt_close($check);
         header("Location: affiliations.php?status=duplicate");
         exit();
     }
 
-    $sql = "INSERT INTO affiliations (name, description, color_code) VALUES ('$name', '$description', '$color_code')";
-    if (mysqli_query($conn, $sql)) {
-        $user_id = $_SESSION['user_id'];
-        $activity = "Added Affiliation: " . $name;
-        mysqli_query($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES ('$user_id', '$activity', NOW())");
-        header("Location: affiliations.php?status=success");
-        exit();
-    } else {
-        header("Location: affiliations.php?status=error");
+mysqli_stmt_close($check);
+
+    $stmt = mysqli_prepare(
+    $conn,
+    "INSERT INTO affiliations
+    (name, description, color_code)
+    VALUES (?, ?, ?)"
+);
+
+mysqli_stmt_bind_param(
+    $stmt,
+    "sss",
+    $name,
+    $description,
+    $color_code
+);
+
+if (!mysqli_stmt_execute($stmt)) {
+
+    if (mysqli_errno($conn) == 1062) {
+        header("Location: affiliations.php?status=duplicate");
         exit();
     }
+
+    error_log(mysqli_error($conn));
+
+    header("Location: affiliations.php?status=error");
+    exit();
+}
+
+mysqli_stmt_close($stmt);
 }
 
 /*    HANDLE DELETE AFFILIATION */
@@ -47,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_affiliation'])
         exit();
     }
 
-    $aff_id = mysqli_real_escape_string($conn, $_POST['affiliation_id']);
+    $aff_id = (int) $_POST['affiliation_id'];
 
     // Check if affiliation has candidates
     $checkCandidates = mysqli_query($conn, "SELECT COUNT(*) as total FROM candidates WHERE affiliation_id = '$aff_id'");
@@ -60,16 +94,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_affiliation'])
 
     $affName = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name FROM affiliations WHERE id = '$aff_id'"))['name'];
 
-    if (mysqli_query($conn, "DELETE FROM affiliations WHERE id = '$aff_id'")) {
-        $user_id = $_SESSION['user_id'];
-        $activity = "Deleted Affiliation: " . $affName;
-        mysqli_query($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES ('$user_id', '$activity', NOW())");
-        header("Location: affiliations.php?status=deleted");
-        exit();
-    } else {
-        header("Location: affiliations.php?status=error");
-        exit();
+    $deleteStmt = mysqli_prepare(
+    $conn,
+    "DELETE FROM affiliations WHERE id = ?"
+);
+
+mysqli_stmt_bind_param(
+    $deleteStmt,
+    "i",
+    $aff_id
+);
+
+if (mysqli_stmt_execute($deleteStmt)) {
+
+    $user_id = $_SESSION['user_id'];
+    $activity = "Deleted Affiliation: " . $affName;
+
+    $logStmt = mysqli_prepare(
+        $conn,
+        "INSERT INTO logs (user_id, activity, log_time)
+         VALUES (?, ?, NOW())"
+    );
+
+    if ($logStmt) {
+        mysqli_stmt_bind_param(
+            $logStmt,
+            "is",
+            $user_id,
+            $activity
+        );
+
+        mysqli_stmt_execute($logStmt);
+        mysqli_stmt_close($logStmt);
     }
+
+    mysqli_stmt_close($deleteStmt);
+
+    header("Location: affiliations.php?status=deleted");
+    exit();
+
+} else {
+
+    error_log(mysqli_error($conn));
+
+    mysqli_stmt_close($deleteStmt);
+
+    header("Location: affiliations.php?status=error");
+    exit();
+}
 }
 
 /* Fetch all affiliations with candidate counts */
