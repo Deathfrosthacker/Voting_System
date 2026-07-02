@@ -37,21 +37,24 @@ if (isset($_POST['add_admin'])) {
     $id_number = trim($_POST['id_number']);
     // Basic validation for ID number (only digits, length between 6 and 12)
     if (!preg_match('/^[0-9]{6,12}$/', $id_number)) {
-    header("Location: adminadd.php?status=invalid_id");
-    exit();
-}
+        header("Location: adminadd.php?status=invalid_id");
+        exit();
+    }
     $name = trim($_POST['name']);
     // Basic validation for name (only letters, spaces, and certain punctuation)
     if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $name)) {
-    header("Location: adminadd.php?status=invalid_name");
-    exit();
-}
+        header("Location: adminadd.php?status=invalid_name");
+        exit();
+    }
     $email = trim($_POST['email']);
     // Basic email format validation
    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    header("Location: adminadd.php?status=invalid_email");
-    exit();
-}
+        header("Location: adminadd.php?status=invalid_email");
+        exit();
+    }
+
+    /* FIX 1: Added missing mysqli_stmt_bind_param before executing the prepared statement */
+    mysqli_stmt_bind_param($checkId, "s", $id_number);
     mysqli_stmt_execute($checkId);
     $idResult = mysqli_stmt_get_result($checkId);
     if (mysqli_num_rows($idResult) > 0) {
@@ -315,6 +318,27 @@ if ($admins === false) {
     Swal.fire({
         icon: 'warning', title: 'Password Too Short!',
         text: 'Password must be at least 8 characters long.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "invalid_id"): ?>
+    /* FIX 2: Added missing SweetAlert handler for invalid_id */
+    Swal.fire({
+        icon: 'warning', title: 'Invalid ID Number!',
+        text: 'ID number must be 6-12 digits (numbers only). Please check and try again.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "invalid_name"): ?>
+    /* FIX 3: Added missing SweetAlert handler for invalid_name */
+    Swal.fire({
+        icon: 'warning', title: 'Invalid Name!',
+        text: 'Name must be 3-100 characters and contain only letters, spaces, and basic punctuation.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
+<?php elseif ($_GET['status'] === "invalid_email"): ?>
+    /* FIX 4: Added missing SweetAlert handler for invalid_email */
+    Swal.fire({
+        icon: 'warning', title: 'Invalid Email!',
+        text: 'Please enter a valid email address format (e.g., name@example.com).',
         confirmButtonColor: '#f59e0b'
     }).then(() => { window.history.replaceState({}, document.title, 'adminadd.php'); });
 <?php endif; ?>

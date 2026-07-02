@@ -80,10 +80,12 @@
         <p>Please log in to continue</p>
 
         <form action="logindb.php" method="POST">
-            <!-- ADDED: CSRF token for defense in depth -->
+            <!-- FIX: Start session BEFORE requiring csrf_helper to prevent double session_start() -->
             <?php 
             require_once "./csrf_helper.php";
-            session_start();
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
             echo csrf_input_field(); 
             ?>
 

@@ -3,6 +3,12 @@ session_start();
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
 
+/* FIX 1: Added missing admin role check - was only checking timeout, not role */
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header("Location: login.php");
+    exit();
+}
+
 /* Simple admin protection */
 if (
     isset($_SESSION['last_activity']) &&
@@ -636,13 +642,14 @@ $latestCandidate = mysqli_query(
 
 </body>
 </html>
+
 <?php 
-//close connections and free results
-if ($logsResult && mysqli_num_rows($logsResult) > 0) {
-    mysqli_free_result($logsResult);
-    mysqli_free_result($resultsResult);
-    mysqli_free_result($latestPosition);
-    mysqli_free_result($latestCandidate);
-    mysqli_close($conn);
-} ?>
+/* FIX 2: Moved cleanup code BEFORE closing </html> and improved error handling */
+// Free result sets if they exist
+if (isset($resultsResult) && $resultsResult) mysqli_free_result($resultsResult);
+if (isset($logsResult) && $logsResult) mysqli_free_result($logsResult);
+if (isset($latestPosition) && $latestPosition) mysqli_free_result($latestPosition);
+if (isset($latestCandidate) && $latestCandidate) mysqli_free_result($latestCandidate);
+// Close connection
+if (isset($conn)) mysqli_close($conn);
 ?>

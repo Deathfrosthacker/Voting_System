@@ -16,11 +16,12 @@ if (isset($_POST['add_affiliation'])) {
         exit();
     }
 
-    $$name = trim($_POST['affiliation_name']);
+    /* FIX 1: Changed $$name to $name - was creating a variable variable instead of setting $name */
+    $name = trim($_POST['affiliation_name']);
     if (!preg_match("/^[a-zA-Z0-9\s&.,'-]{3,100}$/", $name)) {
-    header("Location: affiliations.php?status=invalid_name");
-    exit();
-}
+        header("Location: affiliations.php?status=invalid_name");
+        exit();
+    }
     $description = trim($_POST['description'] ?? '');
     $color_code = trim($_POST['color_code'] ?? '#2563eb');
 
@@ -315,7 +316,7 @@ $affiliations = mysqli_query($conn, "
             <div class="affiliation-card" style="--aff-color: <?php echo htmlspecialchars($row['color_code']); ?>">
                 <div class="affiliation-info">
                     <h4>
-                        <span class="color-dot" style="background-color: <?php echo htmlspecialchars($row['color_code']); ?>"></span>
+                        <span class="color-dot" style="background-color: <?php echo htmlspecialchars($row['color_code']); ?>;"></span>
                         <?php echo htmlspecialchars($row['name']); ?>
                         <?php if ($row['name'] === 'Independent'): ?>
                             <span style="font-size: 11px; background: #f3f4f6; padding: 2px 8px; border-radius: 12px; color: #6b7280;">Default</span>
@@ -380,6 +381,13 @@ $affiliations = mysqli_query($conn, "
         icon: 'error', title: 'Security Error!',
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
+    }).then(() => { window.history.replaceState({}, document.title, 'affiliations.php'); });
+<?php elseif ($_GET['status'] === "invalid_name"): ?>
+    /* FIX 2: Added missing SweetAlert handler for invalid_name */
+    Swal.fire({
+        icon: 'warning', title: 'Invalid Name!',
+        text: 'Affiliation name must be 3-100 characters and contain only letters, numbers, spaces, and basic punctuation.',
+        confirmButtonColor: '#f59e0b'
     }).then(() => { window.history.replaceState({}, document.title, 'affiliations.php'); });
 <?php elseif ($_GET['status'] === "error"): ?>
     Swal.fire({

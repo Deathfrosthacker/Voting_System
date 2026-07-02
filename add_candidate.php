@@ -48,59 +48,60 @@ if ($affiliations === false) {
 if (isset($_POST['add_candidate'])) {
     //ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        /* FIX: Use GET-based redirect for CSRF errors so popup will show */
         header("Location: add_candidate.php?status=csrf_error");
         exit();
     }
 
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
     $position       = $_POST['position_name'];
- $start_date = $_POST['start_date'];
-$end_date   = $_POST['end_date'];
+    $start_date = $_POST['start_date'];
+    $end_date   = $_POST['end_date'];
 
-$today = date('Y-m-d');
+    $today = date('Y-m-d');
 
-// Validate dates
-if (
-    strtotime($start_date) === false ||
-    strtotime($end_date) === false
-) {
-    header("Location: add_candidate.php?status=invalid_date");
-    exit();
-}
+    // Validate dates
+    if (
+        strtotime($start_date) === false ||
+        strtotime($end_date) === false
+    ) {
+        header("Location: add_candidate.php?status=invalid_date");
+        exit();
+    }
 
-// Start date cannot be in the past
-if ($start_date < $today) {
-    header("Location: add_candidate.php?status=start_date_past");
-    exit();
-}
+    // Start date cannot be in the past
+    if ($start_date < $today) {
+        header("Location: add_candidate.php?status=start_date_past");
+        exit();
+    }
 
-// End date must be after start date
-if ($end_date <= $start_date) {
-    header("Location: add_candidate.php?status=invalid_date_range");
-    exit();
-}
+    // End date must be after start date
+    if ($end_date <= $start_date) {
+        header("Location: add_candidate.php?status=invalid_date_range");
+        exit();
+    }
     $is_independent = isset($_POST['is_independent']) ? 1 : 0;
     $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
 
     // Candidate name validation
-if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $candidate_name)) {
-    header("Location: add_candidate.php?status=invalid_name");
-    exit();
-}
+    if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $candidate_name)) {
+        header("Location: add_candidate.php?status=invalid_name");
+        exit();
+    }
 
-// Date validation
-if (
-    strtotime($start_date) === false ||
-    strtotime($end_date) === false
-) {
-    header("Location: add_candidate.php?status=invalid_date");
-    exit();
-}
+    // Date validation
+    if (
+        strtotime($start_date) === false ||
+        strtotime($end_date) === false
+    ) {
+        header("Location: add_candidate.php?status=invalid_date");
+        exit();
+    }
 
-if (strtotime($start_date) > strtotime($end_date)) {
-    header("Location: add_candidate.php?status=invalid_date_range");
-    exit();
-}
+    if (strtotime($start_date) > strtotime($end_date)) {
+        header("Location: add_candidate.php?status=invalid_date_range");
+        exit();
+    }
 
     /* FIX 1: Validate that the position actually exists using prepared statement */
     $checkPos = mysqli_prepare($conn, "SELECT id FROM positions WHERE position_name = ? LIMIT 1");
@@ -154,73 +155,76 @@ if (strtotime($start_date) > strtotime($end_date)) {
     }
 
     /* FIX 3: Use prepared statement for INSERT */
-$stmt = mysqli_prepare(
-    $conn,
-    "INSERT INTO candidates
-    (name, position, start_date, end_date, is_independent, affiliation_id)
-    VALUES (?, ?, ?, ?, ?, ?)"
-);
+    $stmt = mysqli_prepare(
+        $conn,
+        "INSERT INTO candidates
+        (name, position, start_date, end_date, is_independent, affiliation_id)
+        VALUES (?, ?, ?, ?, ?, ?)"
+    );
 
-if ($stmt === false) {
-    header("Location: add_candidate.php?status=error");
-    exit();
-}
+    if ($stmt === false) {
+        header("Location: add_candidate.php?status=error");
+        exit();
+    }
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "ssssii",
-    $candidate_name,
-    $position,
-    $start_date,
-    $end_date,
-    $is_independent,
-    $affiliation_id
-);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "ssssii",
+        $candidate_name,
+        $position,
+        $start_date,
+        $end_date,
+        $is_independent,
+        $affiliation_id
+    );
 
-if (!mysqli_stmt_execute($stmt)) {
+    if (!mysqli_stmt_execute($stmt)) {
 
-    if (mysqli_errno($conn) == 1062) {
+        if (mysqli_errno($conn) == 1062) {
+            header(
+                "Location: add_candidate.php?status=duplicate_candidate"
+            );
+            exit();
+        }
+
+        error_log(mysqli_error($conn));
+
         header(
-            "Location: add_candidate.php?status=duplicate_candidate"
+            "Location: add_candidate.php?status=error"
         );
         exit();
     }
 
-    error_log(mysqli_error($conn));
+    /* Candidate inserted successfully */
 
-    header(
-        "Location: add_candidate.php?status=error"
+    // Log activity
+    $user_id = $_SESSION['user_id'];
+    $activity = "Added Candidate";
+
+    $logStmt = mysqli_prepare(
+        $conn,
+        "INSERT INTO logs (user_id, activity, log_time)
+         VALUES (?, ?, NOW())"
     );
+
+    if ($logStmt) {
+        mysqli_stmt_bind_param(
+            $logStmt,
+            "is",
+            $user_id,
+            $activity
+        );
+
+        mysqli_stmt_execute($logStmt);
+        mysqli_stmt_close($logStmt);
+    }
+
+    mysqli_stmt_close($stmt);
+    /* FIX: Redirect with success status so popup shows via $_GET */
+    header("Location: add_candidate.php?status=success");
     exit();
 }
-
-/* Candidate inserted successfully */
-
-// Log activity
-$user_id = $_SESSION['user_id'];
-$activity = "Added Candidate";
-
-$logStmt = mysqli_prepare(
-    $conn,
-    "INSERT INTO logs (user_id, activity, log_time)
-     VALUES (?, ?, NOW())"
-);
-
-if ($logStmt) {
-    mysqli_stmt_bind_param(
-        $logStmt,
-        "is",
-        $user_id,
-        $activity
-    );
-
-    mysqli_stmt_execute($logStmt);
-    mysqli_stmt_close($logStmt);
-}
-
-mysqli_stmt_close($stmt);
-$status = "success";
-}?>
+?>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -375,7 +379,7 @@ $status = "success";
                             <?php if ($row['is_independent']): ?>
                                 <span class="affiliation-badge independent-badge">Independent</span>
                             <?php elseif ($row['affiliation_name']): ?>
-                                <span class="affiliation-badge" style="background: <?php echo htmlspecialchars($row['color_code']); ?>20; color: <?php echo htmlspecialchars($row['color_code']); ?>;">
+                                <span class="affiliation-badge" style="background: <?php echo htmlspecialchars($row['color_code']); ?>20; color: <?php echo htmlspecialchars($row['color_code']); ?>">
                                     <span class="color-dot" style="width:8px;height:8px;border-radius:50%;background:<?php echo htmlspecialchars($row['color_code']); ?>;display:inline-block;"></span>
                                     <?php echo htmlspecialchars($row['affiliation_name']); ?>
                                 </span>
@@ -422,9 +426,10 @@ function toggleAffiliation() {
 }
 </script>
 
-<?php if (isset($status)): ?>
+/* FIX: Completely rewritten popup system - now checks $_GET['status'] for ALL status types */
+<?php if (isset($_GET['status'])): ?>
 <script>
-<?php if ($status === "success"): ?>
+<?php if ($_GET['status'] === "success"): ?>
     Swal.fire({
         icon: 'success',
         title: 'Success!',
@@ -434,33 +439,71 @@ function toggleAffiliation() {
     }).then(() => {
         window.location.href = "add_candidate.php";
     });
-<?php elseif ($status === "csrf_error"): ?>  <!--ADDED: CSRF error handler -->
+<?php elseif ($_GET['status'] === "csrf_error"): ?>
     Swal.fire({
         icon: 'error',
         title: 'Security Error!',
         text: 'Invalid CSRF token. Please refresh and try again.',
         confirmButtonColor: '#ef4444'
     });
-<?php elseif ($status === "invalid_position"): ?>
+<?php elseif ($_GET['status'] === "invalid_position"): ?>
     Swal.fire({
         icon: 'error',
         title: 'Invalid Position!',
         text: 'The selected position does not exist in the system.',
         confirmButtonColor: '#ef4444'
     });
-<?php elseif ($status === "error"): ?>
+<?php elseif ($_GET['status'] === "invalid_name"): ?>
+    /* FIX: Added missing handler for invalid_name */
     Swal.fire({
-        icon: 'error',
-        title: 'Error!',
-        text: 'Could not add candidate. Please try again.',
-        confirmButtonColor: '#ef4444'
+        icon: 'warning',
+        title: 'Invalid Candidate Name!',
+        text: 'Name must be 3-100 characters and contain only letters, spaces, and basic punctuation.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
     });
-<?php endif; ?>
-</script>
-<?php endif; ?>
-
-<?php if (isset($_GET['status']) && $_GET['status'] === "similar_name"): ?>
-<script>
+<?php elseif ($_GET['status'] === "invalid_date"): ?>
+    /* FIX: Added missing handler for invalid_date */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Date!',
+        text: 'Please enter valid start and end dates.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
+<?php elseif ($_GET['status'] === "start_date_past"): ?>
+    /* FIX: Added missing handler for start_date_past */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Start Date!',
+        text: 'Start date cannot be in the past.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
+<?php elseif ($_GET['status'] === "invalid_date_range"): ?>
+    /* FIX: Added missing handler for invalid_date_range */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Date Range!',
+        text: 'End date must be after the start date.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
+<?php elseif ($_GET['status'] === "duplicate_candidate"): ?>
+    /* FIX: Added missing handler for duplicate_candidate */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Duplicate Candidate!',
+        text: 'This candidate already exists for the selected position.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
+<?php elseif ($_GET['status'] === "similar_name"): ?>
     Swal.fire({
         icon: 'warning',
         title: 'Similar Name Found!',
@@ -469,6 +512,14 @@ function toggleAffiliation() {
     }).then(() => {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
+<?php elseif ($_GET['status'] === "error"): ?>
+    Swal.fire({
+        icon: 'error',
+        title: 'Error!',
+        text: 'Could not add candidate. Please try again.',
+        confirmButtonColor: '#ef4444'
+    });
+<?php endif; ?>
 </script>
 <?php endif; ?>
 

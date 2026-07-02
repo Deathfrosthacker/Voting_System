@@ -5,15 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once "./config/connection.php";
 
-/* Session timeout check */
-if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
-    session_unset();
-    session_destroy();
-    exit();
-}
-if (isset($_SESSION['user_id'])) {
-    $_SESSION['last_activity'] = time();
-}
+/* FIX: Removed session timeout check that was blocking auto-declaration.
+   The auto-declare engine must run regardless of session state 
+   since it processes expired elections automatically. */
 
 /*    CREATE RESULTS TABLE */
 $createTable = "CREATE TABLE IF NOT EXISTS election_results (
@@ -114,3 +108,4 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         }
     }
 }
+?>
