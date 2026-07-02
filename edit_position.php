@@ -2,6 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./election_time_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -45,68 +46,84 @@ if ($regions === false) {
     die("Database error fetching regions.");
 }
 
-/*    HANDLE UPDATE POSITION */
+/* ============================================================
+   HANDLE UPDATE POSITION - With DATETIME + 24h Validation
+   ============================================================ */
 if (isset($_POST['update_position'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_message = "Invalid CSRF token. Please try again.";
     } else {
         $name = mysqli_real_escape_string($conn, $_POST['position_name']);
         $description = mysqli_real_escape_string($conn, $_POST['description']);
-        $start = $_POST['start_date'];
-        $end = $_POST['end_date'];
+        
+        /* FIX: Use full DATETIME instead of DATE */
+        $start = $_POST['start_date']; // datetime-local format
+        $end = $_POST['end_date'];     // datetime-local format
+        
+        // Convert to MySQL DATETIME format
+        $start_mysql = date('Y-m-d H:i:s', strtotime($start));
+        $end_mysql = date('Y-m-d H:i:s', strtotime($end));
 
         /*NEW: Handle scope and region changes */
         $scope = $_POST['scope'] ?? 'global';
         $new_region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
 
-        // FIX 1: Validate dates when editing - prevent past end dates
-        $today = date('Y-m-d');
+        // FIX: Validate datetimes when editing
+        $now = date('Y-m-d H:i:s');
 
         // For editing, we allow the start date to be in the past if it already was
         // But we don't allow changing it to a past date if it was future
-        if ($start < $today && $position['start_date'] >= $today) {
-            $error_message = "Start date cannot be changed to a past date.";
-        } elseif ($end < $today) {
-            $error_message = "End date cannot be in the past.";
-        } elseif ($end < $start) {
-            $error_message = "End date must be after or equal to the start date.";
+        $orig_start = $position['start_date'];
+        
+        if ($start_mysql < $now && $orig_start >= $now) {
+            $error_message = "Start datetime cannot be changed to a past date/time.";
+        } elseif ($end_mysql < $now) {
+            $error_message = "End datetime cannot be in the past.";
         } else {
-            /* FIX 2: Check for duplicate name (excluding current record)*/
-            $checkDup = mysqli_prepare($conn, 
-                "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) AND id != ? LIMIT 1"
-            );
-            mysqli_stmt_bind_param($checkDup, "si", $name, $position_id);
-            mysqli_stmt_execute($checkDup);
-            $dupResult = mysqli_stmt_get_result($checkDup);
-            if (mysqli_num_rows($dupResult) > 0) {
-                $error_message = "A position with this name already exists.";
+            /* FIX: 24-hour minimum duration validation on edit */
+            $minDuration = get_minimum_election_duration($conn);
+            $durationCheck = validate_election_duration($start_mysql, $end_mysql, $minDuration);
+            
+            if (!$durationCheck['valid']) {
+                $error_message = $durationCheck['error'];
             } else {
-                /* FIX 3: Use prepared statement for UPDATE with proper NULL handling */
-                if ($new_region_id === null) {
-                    $updStmt = mysqli_prepare($conn, 
-                        "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = NULL WHERE id = ?"
-                    );
-                    mysqli_stmt_bind_param($updStmt, "ssssi", $name, $description, $start, $end, $position_id);
+                /* FIX: Check for duplicate name (excluding current record)*/
+                $checkDup = mysqli_prepare($conn, 
+                    "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) AND id != ? LIMIT 1"
+                );
+                mysqli_stmt_bind_param($checkDup, "si", $name, $position_id);
+                mysqli_stmt_execute($checkDup);
+                $dupResult = mysqli_stmt_get_result($checkDup);
+                if (mysqli_num_rows($dupResult) > 0) {
+                    $error_message = "A position with this name already exists.";
                 } else {
-                    $updStmt = mysqli_prepare($conn, 
-                        "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = ? WHERE id = ?"
-                    );
-                    mysqli_stmt_bind_param($updStmt, "ssssii", $name, $description, $start, $end, $new_region_id, $position_id);
-                }
+                    /* FIX: Use prepared statement for UPDATE with DATETIME */
+                    if ($new_region_id === null) {
+                        $updStmt = mysqli_prepare($conn, 
+                            "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = NULL WHERE id = ?"
+                        );
+                        mysqli_stmt_bind_param($updStmt, "ssssi", $name, $description, $start_mysql, $end_mysql, $position_id);
+                    } else {
+                        $updStmt = mysqli_prepare($conn, 
+                            "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = ? WHERE id = ?"
+                        );
+                        mysqli_stmt_bind_param($updStmt, "ssssii", $name, $description, $start_mysql, $end_mysql, $new_region_id, $position_id);
+                    }
 
-                if (mysqli_stmt_execute($updStmt)) {
-                    // LOG ACTIVITY
-                    $user_id = $_SESSION['user_id'];
-                    $activity = "Updated Position: " . $name;
+                    if (mysqli_stmt_execute($updStmt)) {
+                        // LOG ACTIVITY
+                        $user_id = $_SESSION['user_id'];
+                        $activity = "Updated Position: " . $name;
 
-                    $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
-                    mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
-                    mysqli_stmt_execute($logStmt);
+                        $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
+                        mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
+                        mysqli_stmt_execute($logStmt);
 
-                    header("Location: positions.php?status=updated");
-                    exit();
-                } else {
-                    $error_message = "Error updating position. Please try again.";
+                        header("Location: positions.php?status=updated");
+                        exit();
+                    } else {
+                        $error_message = "Error updating position. Please try again.";
+                    }
                 }
             }
         }
@@ -138,6 +155,27 @@ if (isset($_POST['update_position'])) {
             display: none; margin-bottom: 20px;
         }
         .region-select-group.active { display: block; }
+        input[type="datetime-local"] {
+            font-family: inherit;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 100%;
+        }
+        .duration-info {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #166534;
+        }
+        .duration-info strong {
+            color: #15803d;
+        }
     </style>
 </head>
 
@@ -170,7 +208,7 @@ if (isset($_POST['update_position'])) {
                 </div>
             <?php endif; ?>
 
-            <form method="POST">
+            <form method="POST" id="editPositionForm">
                 <?php echo csrf_input_field(); ?>
                 <div class="form-group">
                     <label for="position_name">Position Name <span>*</span></label>
@@ -219,16 +257,29 @@ if (isset($_POST['update_position'])) {
                     </select>
                 </div>
 
+                <!-- FIX: Changed to datetime-local inputs -->
                 <div class="date-inputs">
                     <div class="form-group">
-                        <label for="start_date">Start Date <span>*</span></label>
-                        <input type="date" id="start_date" name="start_date" value="<?php echo $position['start_date']; ?>" required>
+                        <label for="start_date">Start Date & Time <span>*</span></label>
+                        <input type="datetime-local" id="start_date" name="start_date" 
+                               value="<?php echo format_for_datetime_input($position['start_date']); ?>" required>
                     </div>
 
                     <div class="form-group">
-                        <label for="end_date">End Date <span>*</span></label>
-                        <input type="date" id="end_date" name="end_date" value="<?php echo $position['end_date']; ?>" required min="<?php echo date('Y-m-d'); ?>">
+                        <label for="end_date">End Date & Time <span>*</span></label>
+                        <input type="datetime-local" id="end_date" name="end_date" 
+                               value="<?php echo format_for_datetime_input($position['end_date']); ?>" required
+                               min="<?php echo format_for_datetime_input(date('Y-m-d H:i:s', strtotime($position['start_date'] . ' +24 hours'))); ?>">
                     </div>
+                </div>
+
+                <!-- NEW: Duration requirement info -->
+                <div class="duration-info">
+                    <strong>Requirement:</strong> Elections must run for a minimum of <strong>24 hours</strong>.
+                    Current duration: <strong><?php 
+                        $durSecs = strtotime($position['end_date']) - strtotime($position['start_date']);
+                        echo round($durSecs / 3600, 1); 
+                    ?> hours</strong>
                 </div>
 
                 <div style="display: flex; gap: 12px;">
@@ -264,6 +315,49 @@ function selectScope(scope) {
         document.getElementById('region_id').removeAttribute('required');
     }
 }
+
+/* NEW: Client-side 24-hour minimum duration validation */
+document.getElementById('editPositionForm').addEventListener('submit', function(e) {
+    const startInput = document.getElementById('start_date').value;
+    const endInput = document.getElementById('end_date').value;
+    
+    if (!startInput || !endInput) {
+        e.preventDefault();
+        Swal.fire({
+            icon: 'warning',
+            title: 'Missing Dates',
+            text: 'Please fill in both start and end date/time.',
+            confirmButtonColor: '#f59e0b'
+        });
+        return false;
+    }
+    
+    const start = new Date(startInput);
+    const end = new Date(endInput);
+    const diffHours = (end - start) / (1000 * 60 * 60);
+    
+    if (diffHours < 24) {
+        e.preventDefault();
+        Swal.fire({
+            icon: 'error',
+            title: 'Duration Too Short',
+            text: `Election duration is ${diffHours.toFixed(1)} hours. Minimum required is 24 hours.`,
+            confirmButtonColor: '#ef4444'
+        });
+        return false;
+    }
+    
+    return true;
+});
+
+/* NEW: Auto-adjust end date minimum when start date changes */
+document.getElementById('start_date').addEventListener('change', function() {
+    const start = new Date(this.value);
+    if (!isNaN(start.getTime())) {
+        const minEnd = new Date(start.getTime() + (24 * 60 * 60 * 1000));
+        document.getElementById('end_date').min = minEnd.toISOString().slice(0, 16);
+    }
+});
 </script>
 
 </body>

@@ -2,6 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./auto_declare.php"; // Run auto-processing first
+require_once "./election_time_helper.php";
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: login.php");
@@ -152,11 +153,12 @@ body {
                         </div>
                         <div class="stat">
                             <span class="stat-label">Election Ended</span>
-                            <span class="stat-value"><?php echo date('M d, Y', strtotime($r['end_date'])); ?></span>
+                            <!-- FIX: Display full datetime -->
+                            <span class="stat-value"><?php echo format_election_datetime($r['end_date']); ?></span>
                         </div>
                         <div class="stat">
                             <span class="stat-label">Declared</span>
-                            <span class="stat-value"><?php echo date('M d, Y', strtotime($r['declared_at'])); ?></span>
+                            <span class="stat-value"><?php echo date('M d, Y g:i A', strtotime($r['declared_at'])); ?></span>
                         </div>
                     </div>
                 </div>
@@ -166,7 +168,7 @@ body {
         <div class="empty-state">
             <i class="fas fa-inbox"></i>
             <h3>No completed elections yet</h3>
-            <p>Results will appear here once an election reaches its end date.</p>
+            <p>Results will appear here once an election reaches its end date and time.</p>
         </div>
     <?php endif; ?>
 </div>

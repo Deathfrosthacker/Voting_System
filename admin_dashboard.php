@@ -2,6 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
+require_once "./election_time_helper.php";
 
 /* FIX 1: Added missing admin role check - was only checking timeout, not role */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
@@ -99,7 +100,6 @@ $latestCandidate = mysqli_query(
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
             min-height: 100vh;
         }
 
@@ -504,9 +504,10 @@ $latestCandidate = mysqli_query(
                 </div>
                 <div class="info-meta">
                     <i class="fas fa-calendar-alt"></i>
-                    <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
-                    → 
-                    <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
+                    <!-- FIX: Display full datetime -->
+                    <?php echo format_election_datetime($pos['start_date']); ?> 
+                    &rarr; 
+                    <?php echo format_election_datetime($pos['end_date']); ?>
                 </div>
 
             <?php else: ?>
@@ -533,9 +534,10 @@ $latestCandidate = mysqli_query(
                 </div>
                 <div class="info-meta">
                     <i class="fas fa-calendar-alt"></i>
-                    <?php echo date('M d, Y', strtotime($cand['start_date'])); ?> 
-                    → 
-                    <?php echo date('M d, Y', strtotime($cand['end_date'])); ?>
+                    <!-- FIX: Display full datetime -->
+                    <?php echo format_election_datetime($cand['start_date']); ?> 
+                    &rarr; 
+                    <?php echo format_election_datetime($cand['end_date']); ?>
                 </div>
 
             <?php else: ?>
@@ -572,7 +574,8 @@ $latestCandidate = mysqli_query(
                                 </span>
                             </td>
                             <td class="count" style="font-size: 18px; color: #667eea;"><?php echo $res['total_votes']; ?></td>
-                            <td><?php echo date('M d, Y', strtotime($res['end_date'])); ?></td>
+                            <!-- FIX: Display full datetime -->
+                            <td><?php echo format_election_datetime($res['end_date']); ?></td>
                         </tr>
                         <?php endwhile; ?>
                     <?php else: ?>

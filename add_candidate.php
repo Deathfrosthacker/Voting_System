@@ -2,6 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./election_time_helper.php";
 
 // Security
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -55,62 +56,39 @@ if (isset($_POST['add_candidate'])) {
 
     $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
     $position       = $_POST['position_name'];
-    $start_date = $_POST['start_date'];
-    $end_date   = $_POST['end_date'];
+    
+    /* FIX: Use DATETIME values from the position */
+    $start_date = $_POST['start_date']; // Already in MySQL DATETIME format from form
+    $end_date   = $_POST['end_date'];   // Already in MySQL DATETIME format from form
 
-    $today = date('Y-m-d');
-
-    // Validate dates
-    if (
-        strtotime($start_date) === false ||
-        strtotime($end_date) === false
-    ) {
-        header("Location: add_candidate.php?status=invalid_date");
-        exit();
-    }
-
-    // Start date cannot be in the past
-    if ($start_date < $today) {
-        header("Location: add_candidate.php?status=start_date_past");
-        exit();
-    }
-
-    // End date must be after start date
-    if ($end_date <= $start_date) {
-        header("Location: add_candidate.php?status=invalid_date_range");
-        exit();
-    }
-    $is_independent = isset($_POST['is_independent']) ? 1 : 0;
-    $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
-
-    // Candidate name validation
-    if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $candidate_name)) {
-        header("Location: add_candidate.php?status=invalid_name");
-        exit();
-    }
-
-    // Date validation
-    if (
-        strtotime($start_date) === false ||
-        strtotime($end_date) === false
-    ) {
-        header("Location: add_candidate.php?status=invalid_date");
-        exit();
-    }
-
-    if (strtotime($start_date) > strtotime($end_date)) {
-        header("Location: add_candidate.php?status=invalid_date_range");
-        exit();
-    }
-
-    /* FIX 1: Validate that the position actually exists using prepared statement */
-    $checkPos = mysqli_prepare($conn, "SELECT id FROM positions WHERE position_name = ? LIMIT 1");
+    // Validate position exists and check its duration
+    $checkPos = mysqli_prepare($conn, "SELECT start_date, end_date FROM positions WHERE position_name = ? LIMIT 1");
     mysqli_stmt_bind_param($checkPos, "s", $position);
     mysqli_stmt_execute($checkPos);
     $checkPosResult = mysqli_stmt_get_result($checkPos);
     
     if ($checkPosResult === false || mysqli_num_rows($checkPosResult) == 0) {
         header("Location: add_candidate.php?status=invalid_position");
+        exit();
+    }
+    
+    $posData = mysqli_fetch_assoc($checkPosResult);
+    
+    /* FIX: Validate election duration meets 24h minimum */
+    $minDuration = get_minimum_election_duration($conn);
+    $durationCheck = validate_election_duration($posData['start_date'], $posData['end_date'], $minDuration);
+    
+    if (!$durationCheck['valid']) {
+        header("Location: add_candidate.php?status=invalid_election_duration&error=" . urlencode($durationCheck['error']));
+        exit();
+    }
+
+    $is_independent = isset($_POST['is_independent']) ? 1 : 0;
+    $affiliation_id = !$is_independent && !empty($_POST['affiliation_id']) ? (int)$_POST['affiliation_id'] : null;
+
+    // Candidate name validation
+    if (!preg_match("/^[a-zA-Z\s.'-]{3,100}$/", $candidate_name)) {
+        header("Location: add_candidate.php?status=invalid_name");
         exit();
     }
 
@@ -154,7 +132,7 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    /* FIX 3: Use prepared statement for INSERT */
+    /* FIX 3: Use prepared statement for INSERT with DATETIME */
     $stmt = mysqli_prepare(
         $conn,
         "INSERT INTO candidates
@@ -270,6 +248,20 @@ if (isset($_POST['add_candidate'])) {
             opacity: 0.5;
             pointer-events: none;
         }
+        /* FIX: Duration warning styling */
+        .duration-warning {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #92400e;
+            display: none;
+        }
+        .duration-warning.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -290,23 +282,41 @@ if (isset($_POST['add_candidate'])) {
             <h3>Available Positions</h3>
             <div class="positions-grid">
                 <?php while ($pos = mysqli_fetch_assoc($positions)): ?>
-                    <div class="position-card" onclick="openForm(
-                        '<?php echo htmlspecialchars($pos['position_name'], ENT_QUOTES); ?>',
-                        '<?php echo $pos['start_date']; ?>',
-                        '<?php echo $pos['end_date']; ?>'
-                    )">
+                    <!-- FIX: Calculate duration for display -->
+                    <?php 
+                        $durSecs = strtotime($pos['end_date']) - strtotime($pos['start_date']);
+                        $durHours = round($durSecs / 3600, 1);
+                        $isValidDur = $durSecs >= 86400;
+                    ?>
+                    <div class="position-card <?php echo !$isValidDur ? 'invalid-duration' : ''; ?>" 
+                         onclick="<?php echo $isValidDur ? "openForm('" . htmlspecialchars($pos['position_name'], ENT_QUOTES) . "', '" . $pos['start_date'] . "', '" . $pos['end_date'] . "')" : "showDurationError('$durHours')"; ?>">
                         <h4><?php echo htmlspecialchars($pos['position_name']); ?></h4>
                         <p class="description"><?php echo htmlspecialchars($pos['description']); ?></p>
                         <div class="position-dates">
                             <div class="date-item">
-                                <span>Start: <?php echo date('M d, Y', strtotime($pos['start_date'])); ?></span>
+                                <span>Start: <?php echo format_election_datetime($pos['start_date']); ?></span>
                             </div>
                             <div class="date-item">
-                                <span>End: <?php echo date('M d, Y', strtotime($pos['end_date'])); ?></span>
+                                <span>End: <?php echo format_election_datetime($pos['end_date']); ?></span>
                             </div>
+                        </div>
+                        <!-- FIX: Show duration badge -->
+                        <div class="duration-badge" style="
+                            margin-top: 8px; padding: 4px 10px; border-radius: 12px; 
+                            font-size: 11px; font-weight: 600; display: inline-block;
+                            background: <?php echo $isValidDur ? '#d1fae5' : '#fee2e2'; ?>;
+                            color: <?php echo $isValidDur ? '#065f46' : '#991b1b'; ?>;
+                        ">
+                            <?php echo $isValidDur ? '&#9989;' : '&#9888;&#65039;'; ?> 
+                            <?php echo $durHours; ?> hours
+                            <?php if (!$isValidDur): ?>- Invalid (min 24h)<?php endif; ?>
                         </div>
                     </div>
                 <?php endwhile; ?>
+            </div>
+            <!-- FIX: Duration warning popup -->
+            <div class="duration-warning" id="durationWarning">
+                This election's duration is too short. Cannot add candidates until the position meets the 24-hour minimum requirement.
             </div>
         </div>
 
@@ -366,8 +376,8 @@ if (isset($_POST['add_candidate'])) {
                         <th>Candidate Name</th>
                         <th>Position</th>
                         <th>Affiliation</th>
-                        <th>Start Date</th>
-                        <th>End Date</th>
+                        <th>Starts</th>
+                        <th>Ends</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -387,8 +397,9 @@ if (isset($_POST['add_candidate'])) {
                                 <span style="color: #94a3b8;">&mdash;</span>
                             <?php endif; ?>
                         </td>
-                        <td><?php echo date('M d, Y', strtotime($row['start_date'])); ?></td>
-                        <td><?php echo date('M d, Y', strtotime($row['end_date'])); ?></td>
+                        <!-- FIX: Display full datetime -->
+                        <td><?php echo format_election_datetime($row['start_date']); ?></td>
+                        <td><?php echo format_election_datetime($row['end_date']); ?></td>
                     </tr>
                     <?php endwhile; ?>
                 </tbody>
@@ -424,9 +435,18 @@ function toggleAffiliation() {
         affiliationGroup.classList.remove('disabled');
     }
 }
+
+/* NEW: Show duration error for invalid elections */
+function showDurationError(hours) {
+    const warning = document.getElementById('durationWarning');
+    warning.innerHTML = '<strong>Cannot add candidate:</strong> This election only runs for ' + hours + ' hours. Minimum required is 24 hours. Please edit the position to extend the duration.';
+    warning.classList.add('show');
+    setTimeout(() => warning.classList.remove('show'), 5000);
+}
 </script>
 
-/* FIX: Completely rewritten popup system - now checks $_GET['status'] for ALL status types */
+<!-- FIX: Changed from PHP /* comment to proper HTML comment -->
+<!-- Completely rewritten popup system - now checks $_GET['status'] for ALL status types -->
 <?php if (isset($_GET['status'])): ?>
 <script>
 <?php if ($_GET['status'] === "success"): ?>
@@ -453,8 +473,17 @@ function toggleAffiliation() {
         text: 'The selected position does not exist in the system.',
         confirmButtonColor: '#ef4444'
     });
+<?php elseif ($_GET['status'] === "invalid_election_duration"): ?>
+    /* NEW: Handler for election duration too short */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Election Duration!',
+        text: '<?php echo htmlspecialchars(urldecode($_GET['error'] ?? 'This election does not meet the 24-hour minimum duration.'), ENT_QUOTES); ?>',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'add_candidate.php');
+    });
 <?php elseif ($_GET['status'] === "invalid_name"): ?>
-    /* FIX: Added missing handler for invalid_name */
     Swal.fire({
         icon: 'warning',
         title: 'Invalid Candidate Name!',
@@ -463,38 +492,7 @@ function toggleAffiliation() {
     }).then(() => {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
-<?php elseif ($_GET['status'] === "invalid_date"): ?>
-    /* FIX: Added missing handler for invalid_date */
-    Swal.fire({
-        icon: 'warning',
-        title: 'Invalid Date!',
-        text: 'Please enter valid start and end dates.',
-        confirmButtonColor: '#f59e0b'
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'add_candidate.php');
-    });
-<?php elseif ($_GET['status'] === "start_date_past"): ?>
-    /* FIX: Added missing handler for start_date_past */
-    Swal.fire({
-        icon: 'warning',
-        title: 'Invalid Start Date!',
-        text: 'Start date cannot be in the past.',
-        confirmButtonColor: '#f59e0b'
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'add_candidate.php');
-    });
-<?php elseif ($_GET['status'] === "invalid_date_range"): ?>
-    /* FIX: Added missing handler for invalid_date_range */
-    Swal.fire({
-        icon: 'warning',
-        title: 'Invalid Date Range!',
-        text: 'End date must be after the start date.',
-        confirmButtonColor: '#f59e0b'
-    }).then(() => {
-        window.history.replaceState({}, document.title, 'add_candidate.php');
-    });
 <?php elseif ($_GET['status'] === "duplicate_candidate"): ?>
-    /* FIX: Added missing handler for duplicate_candidate */
     Swal.fire({
         icon: 'warning',
         title: 'Duplicate Candidate!',

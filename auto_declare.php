@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 require_once "./config/connection.php";
+require_once "./election_time_helper.php";
 
 /* FIX: Removed session timeout check that was blocking auto-declaration.
    The auto-declare engine must run regardless of session state 
@@ -15,18 +16,26 @@ $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     position_name VARCHAR(255) NOT NULL,
     winner_name VARCHAR(255) NOT NULL,
     total_votes INT NOT NULL DEFAULT 0,
-    end_date DATE NOT NULL,
+    end_date DATETIME NOT NULL,
     declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )";
 if (mysqli_query($conn, $createTable) === false) {
     error_log("auto_declare: Failed to create election_results table: " . mysqli_error($conn));
 }
 
-/*    FIND EXPIRED ELECTIONS */
+/* ============================================================
+   FIX: Find expired elections using NOW() instead of CURDATE()
+   
+   Previously: end_date < CURDATE() (would expire at midnight)
+   Now: end_date < NOW() (expires at the exact end datetime)
+   
+   This ensures elections run their full course until the exact
+   end time, not just until the end of the start day.
+   ============================================================ */
 $expired = mysqli_query($conn, "
     SELECT id, position_name, end_date
     FROM positions
-    WHERE end_date < CURDATE()
+    WHERE end_date < NOW()
       AND position_name NOT IN (
           SELECT position_name FROM election_results
       )
@@ -61,7 +70,7 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         $winner_name = $winner['name'];
         $vote_count  = (int)$winner['vote_count'];
 
-        /* Save result using prepared statement */
+        /* Save result using prepared statement - stores full DATETIME */
         $saveStmt = mysqli_prepare($conn, 
             "INSERT INTO election_results (position_name, winner_name, total_votes, end_date) VALUES (?, ?, ?, ?)"
         );
@@ -95,7 +104,7 @@ while ($pos = mysqli_fetch_assoc($expired)) {
 
             /* Log */
             if (isset($_SESSION['user_id'])) {
-                $uid = (int)$_SESSION['user_id'];
+                $uid = (int)$SESSION['user_id'];
                 $act = "Auto-declared winner: $winner_name for $pos_name ($vote_count votes)";
                 $logStmt = mysqli_prepare($conn, 
                     "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
