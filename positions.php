@@ -2,7 +2,6 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
-require_once "./election_time_helper.php";
 
 // Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -19,9 +18,7 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/* ============================================================
-   HANDLE ADD POSITION - With DATETIME + 24h Minimum Validation
-   ============================================================ */
+/*    HANDLE ADD POSITION */
 if (isset($_POST['add_position'])) {
 
     //ADDED: CSRF validation
@@ -32,39 +29,32 @@ if (isset($_POST['add_position'])) {
 
     $name  = mysqli_real_escape_string($conn, $_POST['position_name']);
     $description  = mysqli_real_escape_string($conn, $_POST['description']);
-    
-    /* FIX: Use full DATETIME instead of DATE */
-    $start = $_POST['start_date']; // datetime-local format: Y-m-d\TH:i
-    $end   = $_POST['end_date'];   // datetime-local format: Y-m-d\TH:i
-
-    // Convert datetime-local to MySQL DATETIME format
-    $start_mysql = date('Y-m-d H:i:s', strtotime($start));
-    $end_mysql = date('Y-m-d H:i:s', strtotime($end));
+    $start = $_POST['start_date'];
+    $end   = $_POST['end_date'];
 
     // NEW: Region scope
     $scope = $_POST['scope'] ?? 'global';
     $region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
 
-    /* FIX 1: Validate datetimes - prevent past start times */
-    $now = date('Y-m-d H:i:s');
+    // FIX 1: Validate dates - prevent past dates
+    $today = date('Y-m-d');
 
-    if ($start_mysql < $now) {
+    if ($start < $today) {
         header("Location: positions.php?status=past_start_date");
         exit();
     }
 
-    /* FIX 2: Comprehensive election duration validation (24h minimum) */
-    $minDuration = get_minimum_election_duration($conn);
-    $durationCheck = validate_election_duration($start_mysql, $end_mysql, $minDuration);
-    
-    if (!$durationCheck['valid']) {
-        // Encode error message for display
-        $errorEncoded = urlencode($durationCheck['error']);
-        header("Location: positions.php?status=invalid_duration&error=$errorEncoded");
+    if ($end < $today) {
+        header("Location: positions.php?status=past_end_date");
         exit();
     }
 
-    /* FIX 3: Check for duplicate position name (case-insensitive) */
+    if ($end < $start) {
+        header("Location: positions.php?status=invalid_date_range");
+        exit();
+    }
+
+    /* FIX 2: Check for duplicate position name (case-insensitive) */
     $checkDup = mysqli_prepare($conn, "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) LIMIT 1");
     mysqli_stmt_bind_param($checkDup, "s", $name);
     mysqli_stmt_execute($checkDup);
@@ -74,17 +64,17 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    /* FIX 4: Use prepared statement for INSERT with DATETIME values */
+    /* FIX 3: Use prepared statement for INSERT with proper NULL handling */
     if ($region_id === null) {
         $stmt = mysqli_prepare($conn, 
             "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, NULL)"
         );
-        mysqli_stmt_bind_param($stmt, "ssss", $name, $description, $start_mysql, $end_mysql);
+        mysqli_stmt_bind_param($stmt, "ssss", $name, $description, $start, $end);
     } else {
         $stmt = mysqli_prepare($conn, 
             "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, ?)"
         );
-        mysqli_stmt_bind_param($stmt, "ssssi", $name, $description, $start_mysql, $end_mysql, $region_id);
+        mysqli_stmt_bind_param($stmt, "ssssi", $name, $description, $start, $end, $region_id);
     }
     
     if (mysqli_stmt_execute($stmt)) {
@@ -185,27 +175,6 @@ if ($regions === false) {
             background: #d1fae5;
             color: #065f46;
         }
-        /* FIX: Styling for datetime-local inputs */
-        input[type="datetime-local"] {
-            font-family: inherit;
-            padding: 10px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-            width: 100%;
-        }
-        .duration-info {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-top: 8px;
-            font-size: 13px;
-            color: #166534;
-        }
-        .duration-info strong {
-            color: #15803d;
-        }
     </style>
 </head>
 
@@ -240,7 +209,7 @@ if ($regions === false) {
                 Add New Position
             </h3>
 
-            <form method="POST" id="positionForm">
+            <form method="POST">
                 <!--ADDED: CSRF token field -->
                 <?php echo csrf_input_field(); ?>
 
@@ -288,27 +257,16 @@ if ($regions === false) {
                     </select>
                 </div>
 
-                <!-- FIX: Changed from type="date" to type="datetime-local" for precise timing -->
                 <div class="date-inputs">
                     <div class="form-group">
-                        <label for="start_date">Start Date & Time <span>*</span></label>
-                        <input type="datetime-local" id="start_date" name="start_date" required 
-                               min="<?php echo get_current_datetime_for_input(); ?>"
-                               value="<?php echo get_default_start_datetime(); ?>">
+                        <label for="start_date">Start Date <span>*</span></label>
+                        <input type="date" id="start_date" name="start_date" required min="<?php echo date('Y-m-d'); ?>">
                     </div>
 
                     <div class="form-group">
-                        <label for="end_date">End Date & Time <span>*</span></label>
-                        <input type="datetime-local" id="end_date" name="end_date" required
-                               min="<?php echo get_default_end_datetime(); ?>"
-                               value="<?php echo get_default_end_datetime(); ?>">
+                        <label for="end_date">End Date <span>*</span></label>
+                        <input type="date" id="end_date" name="end_date" required min="<?php echo date('Y-m-d'); ?>">
                     </div>
-                </div>
-
-                <!-- NEW: Duration requirement info -->
-                <div class="duration-info">
-                    <strong>Requirement:</strong> Elections must run for a minimum of <strong>24 hours</strong>. 
-                    The end time must be at least 24 hours after the start time.
                 </div>
 
                 <button type="submit" name="add_position">
@@ -340,20 +298,13 @@ if ($regions === false) {
                             <th>Position</th>
                             <th>Description</th>
                             <th>Scope</th>
-                            <th>Starts</th>
-                            <th>Ends</th>
-                            <th>Duration</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php while($row = mysqli_fetch_assoc($positions)): ?>
-                        <!-- FIX: Calculate and display election duration -->
-                        <?php 
-                            $durationSecs = strtotime($row['end_date']) - strtotime($row['start_date']);
-                            $durationHours = round($durationSecs / 3600, 1);
-                            $isValidDuration = $durationSecs >= 86400;
-                        ?>
                         <tr>
                             <td class="position-name"><?php echo htmlspecialchars($row['position_name']); ?></td>
                             <td class="description-cell"><?php echo htmlspecialchars($row['description']); ?></td>
@@ -373,8 +324,7 @@ if ($regions === false) {
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
-                                    <!-- FIX: Display full datetime -->
-                                    <?php echo format_election_datetime($row['start_date']); ?>
+                                    <?php echo date('M d, Y', strtotime($row['start_date'])); ?>
                                 </span>
                             </td>
                             <td>
@@ -382,23 +332,7 @@ if ($regions === false) {
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
-                                    <?php echo format_election_datetime($row['end_date']); ?>
-                                </span>
-                            </td>
-                            <td>
-                                <!-- FIX: Show duration badge with color coding -->
-                                <span class="duration-badge" style="
-                                    display: inline-flex; align-items: center; gap: 4px;
-                                    padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
-                                    background: <?php echo $isValidDuration ? '#d1fae5' : '#fee2e2'; ?>;
-                                    color: <?php echo $isValidDuration ? '#065f46' : '#991b1b'; ?>;
-                                ">
-                                    <?php if ($isValidDuration): ?>
-                                        &#9989;
-                                    <?php else: ?>
-                                        &#9888;&#65039;
-                                    <?php endif; ?>
-                                    <?php echo $durationHours; ?> hours
+                                    <?php echo date('M d, Y', strtotime($row['end_date'])); ?>
                                 </span>
                             </td>
                             <td>
@@ -480,57 +414,6 @@ function confirmDelete(id, positionName) {
         }
     });
 }
-
-/* NEW: Client-side 24-hour minimum duration validation */
-document.getElementById('positionForm').addEventListener('submit', function(e) {
-    const startInput = document.getElementById('start_date').value;
-    const endInput = document.getElementById('end_date').value;
-    
-    if (!startInput || !endInput) {
-        e.preventDefault();
-        Swal.fire({
-            icon: 'warning',
-            title: 'Missing Dates',
-            text: 'Please fill in both start and end date/time.',
-            confirmButtonColor: '#f59e0b'
-        });
-        return false;
-    }
-    
-    const start = new Date(startInput);
-    const end = new Date(endInput);
-    const diffHours = (end - start) / (1000 * 60 * 60);
-    
-    if (diffHours < 24) {
-        e.preventDefault();
-        Swal.fire({
-            icon: 'error',
-            title: 'Duration Too Short',
-            text: `Election duration is ${diffHours.toFixed(1)} hours. Minimum required is 24 hours.`,
-            confirmButtonColor: '#ef4444'
-        });
-        return false;
-    }
-    
-    return true;
-});
-
-/* NEW: Auto-adjust end date min when start date changes */
-document.getElementById('start_date').addEventListener('change', function() {
-    const start = new Date(this.value);
-    if (!isNaN(start.getTime())) {
-        // Set minimum end date to 24 hours after start
-        const minEnd = new Date(start.getTime() + (24 * 60 * 60 * 1000));
-        const minEndStr = minEnd.toISOString().slice(0, 16);
-        document.getElementById('end_date').min = minEndStr;
-        
-        // If current end date is before minimum, update it
-        const currentEnd = new Date(document.getElementById('end_date').value);
-        if (currentEnd < minEnd) {
-            document.getElementById('end_date').value = minEndStr;
-        }
-    }
-});
 </script>
 
 <?php if (isset($_GET['status'])): ?>
@@ -587,17 +470,25 @@ document.getElementById('start_date').addEventListener('change', function() {
     Swal.fire({
         icon: 'warning',
         title: 'Invalid Start Date!',
-        text: 'Start datetime cannot be in the past. Please select a future date and time.',
+        text: 'Start date cannot be in the past. Please select today or a future date.',
         confirmButtonColor: '#f59e0b'
     }).then(() => {
         window.history.replaceState({}, document.title, 'positions.php');
     });
-<?php elseif ($_GET['status'] === "invalid_duration"): ?>
-    /* NEW: Handler for 24-hour minimum duration violation */
+<?php elseif ($_GET['status'] === "past_end_date"): ?>
     Swal.fire({
         icon: 'warning',
-        title: 'Election Duration Too Short!',
-        text: '<?php echo htmlspecialchars(urldecode($_GET['error'] ?? 'Election must run for at least 24 hours.'), ENT_QUOTES); ?>',
+        title: 'Invalid End Date!',
+        text: 'End date cannot be in the past. Please select today or a future date.',
+        confirmButtonColor: '#f59e0b'
+    }).then(() => {
+        window.history.replaceState({}, document.title, 'positions.php');
+    });
+<?php elseif ($_GET['status'] === "invalid_date_range"): ?>
+    Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Date Range!',
+        text: 'End date must be after or equal to the start date.',
         confirmButtonColor: '#f59e0b'
     }).then(() => {
         window.history.replaceState({}, document.title, 'positions.php');

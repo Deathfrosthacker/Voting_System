@@ -1,7 +1,6 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./election_time_helper.php";
 
 /* SESSION TIMEOUT CHECK (30 minutes)*/
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -68,8 +67,7 @@ if ($positions === false) {
             <div class="position-header">
                 <h3><?php echo htmlspecialchars($pos['position_name']); ?></h3>
                 <div class="date">
-                    <!-- FIX: Display full datetime -->
-                    <?php echo format_election_datetime($pos['start_date']); ?> &rarr; <?php echo format_election_datetime($pos['end_date']); ?>
+                    <?php echo htmlspecialchars($pos['start_date']); ?> &rarr; <?php echo htmlspecialchars($pos['end_date']); ?>
                 </div>
             </div>
 

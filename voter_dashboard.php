@@ -1,7 +1,6 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./election_time_helper.php";
 
 /* SESSION TIMEOUT CHECK (30 minutes)*/
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -28,16 +27,12 @@ $userResult = mysqli_stmt_get_result($stmt);
 $userData = mysqli_fetch_assoc($userResult);
 $voter_region_id = $userData['region_id'] ?? null;
 
-/* ============================================================
-   FIX: Fetch active positions using DATETIME (NOW()) instead of DATE (CURDATE())
-   This ensures elections are only shown when their start_datetime <= NOW() <= end_datetime
-   Replaces: WHERE CURDATE() BETWEEN p.start_date AND p.end_date
-   ============================================================ */
+/* Fetch active positions - filtered by voter's region */
 $regionFilter = $voter_region_id ? "OR region_id = ?" : "";
 $query = "SELECT p.*, r.name as region_name 
           FROM positions p 
           LEFT JOIN regions r ON p.region_id = r.id
-          WHERE NOW() BETWEEN p.start_date AND p.end_date
+          WHERE CURDATE() BETWEEN p.start_date AND p.end_date
             AND (p.region_id IS NULL $regionFilter)
           ORDER BY p.start_date ASC";
 
@@ -66,7 +61,6 @@ $totalPositions = mysqli_num_rows($positions);
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             min-height: 100vh; padding: 20px;
-            background: #f8fafc;
         }
         .header {
             background: white; border-radius: 16px; padding: 24px 32px;
@@ -94,7 +88,7 @@ $totalPositions = mysqli_num_rows($positions);
         }
         .info-bar strong { color: #1e40af; }
         .positions-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px;
         }
         .position-card {
             background: white; border-radius: 16px; padding: 28px;
@@ -115,7 +109,6 @@ $totalPositions = mysqli_num_rows($positions);
         }
         .scope-global { background: #dbeafe; color: #1e40af; }
         .scope-regional { background: #d1fae5; color: #065f46; }
-        /* FIX: Enhanced date info with time display */
         .date-info {
             background: #f7fafc; border-radius: 8px;
             padding: 12px; margin-bottom: 20px;
@@ -123,11 +116,6 @@ $totalPositions = mysqli_num_rows($positions);
         .date-info p { font-size: 13px; color: #4a5568; margin-bottom: 6px; }
         .date-info p:last-child { margin-bottom: 0; }
         .date-info strong { color: #2d3748; }
-        .date-info .datetime { 
-            font-family: 'SF Mono', Monaco, monospace; 
-            font-size: 12px; 
-            color: #667eea;
-        }
         .vote-button {
             display: block; width: 100%; background: #667eea; color: white;
             padding: 12px 20px; border-radius: 8px; text-decoration: none;
@@ -141,14 +129,6 @@ $totalPositions = mysqli_num_rows($positions);
         }
         .no-elections h3 { font-size: 24px; color: #2d3748; margin-bottom: 12px; }
         .no-elections p { color: #718096; font-size: 16px; }
-        /* NEW: Time remaining badge */
-        .time-remaining {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 12px; border-radius: 12px;
-            font-size: 11px; font-weight: 600;
-            background: #fef3c7; color: #92400e;
-            margin-bottom: 12px;
-        }
         @media (max-width: 768px) {
             body { padding: 12px; }
             .header { padding: 20px; flex-direction: column; gap: 16px; text-align: center; }
@@ -192,11 +172,6 @@ $totalPositions = mysqli_num_rows($positions);
     <?php if (mysqli_num_rows($positions) > 0): ?>
         <div class="positions-grid">
             <?php while ($pos = mysqli_fetch_assoc($positions)): ?>
-                <!-- FIX: Calculate time remaining -->
-                <?php 
-                    $timeLeft = strtotime($pos['end_date']) - time();
-                    $hoursLeft = round($timeLeft / 3600, 1);
-                ?>
                 <div class="position-card">
                     <h3><?php echo htmlspecialchars($pos['position_name']); ?></h3>
 
@@ -215,17 +190,9 @@ $totalPositions = mysqli_num_rows($positions);
                         <?php echo htmlspecialchars($pos['description']); ?>
                     </p>
 
-                    <!-- NEW: Time remaining indicator -->
-                    <?php if ($hoursLeft <= 24): ?>
-                        <div class="time-remaining">
-                            &#9200; Ends in <?php echo round($hoursLeft); ?> hours - Vote now!
-                        </div>
-                    <?php endif; ?>
-
-                    <!-- FIX: Enhanced date display with full datetime -->
                     <div class="date-info">
-                        <p><strong>Starts:</strong> <span class="datetime"><?php echo format_election_datetime($pos['start_date']); ?></span></p>
-                        <p><strong>Ends:</strong> <span class="datetime"><?php echo format_election_datetime($pos['end_date']); ?></span></p>
+                        <p><strong>Starts:</strong> <?php echo date('M d, Y', strtotime($pos['start_date'])); ?></p>
+                        <p><strong>Ends:</strong> <?php echo date('M d, Y', strtotime($pos['end_date'])); ?></p>
                     </div>
 
                     <a href="vote.php?position=<?php echo urlencode($pos['position_name']); ?>" 

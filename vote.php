@@ -2,7 +2,6 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
-require_once "./election_time_helper.php";
 
 /* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -45,28 +44,12 @@ if ($posQuery === false || mysqli_num_rows($posQuery) === 0) {
 
 $pos = mysqli_fetch_assoc($posQuery);
 
-/* ============================================================
-   FIX 1: Check if election is currently active using DATETIME
-   Replaces: if ($today < $pos['start_date'] || $today > $pos['end_date'])
-   Now uses precise datetime comparison with helper function
-   ============================================================ */
-$electionStatus = is_election_active($pos['start_date'], $pos['end_date']);
-
-if (!$electionStatus['active']) {
-    die("<div style='max-width:600px;margin:50px auto;padding:30px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;text-align:center;font-family:sans-serif;'>
-        <h2 style='color:#dc2626;margin-bottom:15px;'>&#128683; Election Not Active</h2>
-        <p style='color:#7f1d1d;font-size:16px;line-height:1.6;'>
-            " . htmlspecialchars($electionStatus['error']) . "
-        </p>
-        <p style='color:#991b1b;margin-top:15px;font-size:14px;'>
-            Election Period:<br>
-            <strong>" . format_election_datetime($pos['start_date']) . "</strong> to<br>
-            <strong>" . format_election_datetime($pos['end_date']) . "</strong>
-        </p>
-        <a href='voter_dashboard.php' style='display:inline-block;margin-top:20px;padding:10px 24px;background:#dc2626;color:white;text-decoration:none;border-radius:6px;'>
-            &larr; Back to Dashboard
-        </a>
-    </div>");
+/* FIX 1: Check if election is currently active (within date range) */
+$today = date('Y-m-d');
+if ($today < $pos['start_date'] || $today > $pos['end_date']) {
+    die("This election is not active at this time. Voting is only allowed between " . 
+        date('M d, Y', strtotime($pos['start_date'])) . " and " . 
+        date('M d, Y', strtotime($pos['end_date'])) . ".");
 }
 
 /* FIX 2: Validate voter's region eligibility for regional elections */
@@ -246,22 +229,6 @@ $candidates = mysqli_stmt_get_result($candStmt);
         align-items: center;
         gap: 8px;
     }
-    /* FIX: Countdown timer styling */
-    .countdown-timer {
-        background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-        border: 1px solid #bfdbfe;
-        border-radius: 10px;
-        padding: 12px 20px;
-        margin-bottom: 16px;
-        text-align: center;
-        font-size: 14px;
-        color: #1e40af;
-    }
-    .countdown-timer .time-remaining {
-        font-weight: 700;
-        font-size: 18px;
-        color: #2563eb;
-    }
 </style>
 </head>
 
@@ -297,15 +264,9 @@ $candidates = mysqli_stmt_get_result($candStmt);
             </div>
         <?php endif; ?>
 
-        <!-- FIX: Show precise datetime range -->
         <div class="date-range">
-            &#128197; <?php echo format_election_datetime($pos['start_date']); ?> 
-            &rarr; <?php echo format_election_datetime($pos['end_date']); ?>
-        </div>
-        
-        <!-- NEW: Live countdown timer -->
-        <div class="countdown-timer" id="countdownTimer">
-            Time Remaining: <span class="time-remaining" id="timeRemaining">Calculating...</span>
+            &#128197; <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
+            &rarr; <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
         </div>
     </div>
 
@@ -374,7 +335,7 @@ $candidates = mysqli_stmt_get_result($candStmt);
                                   style="background: <?php echo htmlspecialchars($cand['color_code']); ?>20; 
                                          color: <?php echo htmlspecialchars($cand['color_code']); ?>;
                                          border-color: <?php echo htmlspecialchars($cand['color_code']); ?>40;">
-                                <span class="color-dot" style="background: <?php echo htmlspecialchars($cand['color_code']); ?>;"></span>
+                                <span class="color-dot" style="background: <?php echo htmlspecialchars($cand['color_code']); ?>"></span>
                                 <?php echo htmlspecialchars($cand['affiliation_name']); ?>
                             </span>
                         <?php else: ?>
@@ -407,41 +368,6 @@ $candidates = mysqli_stmt_get_result($candStmt);
     </div>
 
 </div>
-
-<!-- NEW: Live countdown timer script -->
-<script>
-// Election end datetime from PHP
-const electionEnd = new Date('<?php echo date('c', strtotime($pos['end_date'])); ?>');
-
-function updateCountdown() {
-    const now = new Date();
-    const diff = electionEnd - now;
-    
-    if (diff <= 0) {
-        document.getElementById('timeRemaining').textContent = 'Election has ended';
-        document.getElementById('timeRemaining').style.color = '#dc2626';
-        // Optionally reload to show ended state
-        // location.reload();
-        return;
-    }
-    
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
-    let timeStr = '';
-    if (days > 0) timeStr += days + 'd ';
-    timeStr += String(hours).padStart(2, '0') + ':';
-    timeStr += String(minutes).padStart(2, '0') + ':';
-    timeStr += String(seconds).padStart(2, '0');
-    
-    document.getElementById('timeRemaining').textContent = timeStr;
-}
-
-updateCountdown();
-setInterval(updateCountdown, 1000);
-</script>
 
 </body>
 </html>
