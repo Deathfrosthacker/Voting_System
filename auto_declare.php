@@ -6,8 +6,18 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once "./config/connection.php";
 
 /* FIX: Removed session timeout check that was blocking auto-declaration.
-   The auto-declare engine must run regardless of session state 
+   The auto-declare engine must run regardless of session state
    since it processes expired elections automatically. */
+
+/* Helper: log errors both to error_log and to a session flash for visibility */
+function ad_log_error(string $msg): void {
+    $full = "auto_declare: " . $msg;
+    error_log($full);
+    /* Store the last error so calling pages can surface it if desired */
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['auto_declare_error'] = $msg;
+    }
+}
 
 /*    CREATE RESULTS TABLE */
 $createTable = "CREATE TABLE IF NOT EXISTS election_results (
@@ -16,23 +26,38 @@ $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     winner_name VARCHAR(255) NOT NULL,
     total_votes INT NOT NULL DEFAULT 0,
     end_date DATE NOT NULL,
-    declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    region_name VARCHAR(100) DEFAULT NULL,
+    affiliation_name VARCHAR(100) DEFAULT NULL
 )";
 if (mysqli_query($conn, $createTable) === false) {
-    error_log("auto_declare: Failed to create election_results table: " . mysqli_error($conn));
+    ad_log_error("Failed to create election_results table: " . mysqli_error($conn));
 }
 
-/*    FIND EXPIRED ELECTIONS */
+/* ========================================================================
+   CRITICAL FIX: Changed from NOT IN (position_name only) to NOT EXISTS
+   that checks BOTH position_name AND end_date.
+
+   The old NOT IN subquery blocked a position from being processed if
+   *any* past election had the same position name. This meant positions
+   like "President of Kenya" could never be re-used.
+
+   The new NOT EXISTS check ensures we skip only the exact same election
+   (same name + same end date), allowing new elections with the same
+   position name but different dates to be processed.
+   ======================================================================== */
 $expired = mysqli_query($conn, "
     SELECT id, position_name, end_date
-    FROM positions
+    FROM positions p
     WHERE end_date < CURDATE()
-      AND position_name NOT IN (
-          SELECT position_name FROM election_results
+      AND NOT EXISTS (
+          SELECT 1 FROM election_results er
+          WHERE er.position_name = p.position_name
+            AND er.end_date = p.end_date
       )
 ");
 if ($expired === false) {
-    error_log("auto_declare: Failed to fetch expired elections: " . mysqli_error($conn));
+    ad_log_error("Failed to fetch expired elections: " . mysqli_error($conn));
     exit();
 }
 
@@ -43,16 +68,28 @@ while ($pos = mysqli_fetch_assoc($expired)) {
     $pos_name = $pos['position_name'];
     $end_date = $pos['end_date'];
 
-    /* Find winner using prepared statement */
+    /* ================================================================
+       FIX 1: Safer GROUP BY -- include c.name to comply with
+       ONLY_FULL_GROUP_BY mode (enabled by default in MySQL 5.7+).
+       FIX 2: Use COUNT(v.candidate_id) instead of COUNT(v.id) since
+       candidate_id is the known join column and always exists.
+       ================================================================ */
     $winnerStmt = mysqli_prepare($conn, "
-        SELECT c.id, c.name, COUNT(v.id) AS vote_count
+        SELECT c.id, c.name, COUNT(v.candidate_id) AS vote_count
         FROM candidates c
         LEFT JOIN votes v ON c.id = v.candidate_id
         WHERE c.position = ?
-        GROUP BY c.id
+        GROUP BY c.id, c.name
         ORDER BY vote_count DESC, c.id ASC
         LIMIT 1
     ");
+
+    /* FIX 3: Check if prepared statement was created successfully */
+    if ($winnerStmt === false) {
+        ad_log_error("Failed to prepare winner query for position '$pos_name': " . mysqli_error($conn));
+        continue; // Skip this position, try the next one
+    }
+
     mysqli_stmt_bind_param($winnerStmt, "s", $pos_name);
     mysqli_stmt_execute($winnerStmt);
     $winnerQ = mysqli_stmt_get_result($winnerStmt);
@@ -61,10 +98,23 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         $winner_name = $winner['name'];
         $vote_count  = (int)$winner['vote_count'];
 
+        /* ================================================================
+           FIX 4: Wrap save + cleanup in a transaction so partial
+           failures don't leave the database in an inconsistent state.
+           ================================================================ */
+        mysqli_begin_transaction($conn);
+        $txSuccess = true;
+
         /* Save result using prepared statement */
-        $saveStmt = mysqli_prepare($conn, 
+        $saveStmt = mysqli_prepare($conn,
             "INSERT INTO election_results (position_name, winner_name, total_votes, end_date) VALUES (?, ?, ?, ?)"
         );
+        if ($saveStmt === false) {
+            ad_log_error("Failed to prepare save statement for '$pos_name': " . mysqli_error($conn));
+            mysqli_rollback($conn);
+            continue;
+        }
+
         mysqli_stmt_bind_param($saveStmt, "ssis", $pos_name, $winner_name, $vote_count, $end_date);
 
         if (mysqli_stmt_execute($saveStmt)) {
@@ -76,28 +126,55 @@ while ($pos = mysqli_fetch_assoc($expired)) {
             ");
             if ($delVotes) {
                 mysqli_stmt_bind_param($delVotes, "s", $pos_name);
-                mysqli_stmt_execute($delVotes);
+                if (!mysqli_stmt_execute($delVotes)) {
+                    ad_log_error("Failed to delete votes for '$pos_name': " . mysqli_stmt_error($delVotes));
+                    $txSuccess = false;
+                }
+            } else {
+                ad_log_error("Failed to prepare vote deletion for '$pos_name': " . mysqli_error($conn));
+                $txSuccess = false;
             }
 
             /* Delete candidates */
             $delCand = mysqli_prepare($conn, "DELETE FROM candidates WHERE position = ?");
             if ($delCand) {
                 mysqli_stmt_bind_param($delCand, "s", $pos_name);
-                mysqli_stmt_execute($delCand);
+                if (!mysqli_stmt_execute($delCand)) {
+                    ad_log_error("Failed to delete candidates for '$pos_name': " . mysqli_stmt_error($delCand));
+                    $txSuccess = false;
+                }
+            } else {
+                ad_log_error("Failed to prepare candidate deletion for '$pos_name': " . mysqli_error($conn));
+                $txSuccess = false;
             }
 
             /* Delete position */
             $delPos = mysqli_prepare($conn, "DELETE FROM positions WHERE id = ?");
             if ($delPos) {
                 mysqli_stmt_bind_param($delPos, "i", $pos_id);
-                mysqli_stmt_execute($delPos);
+                if (!mysqli_stmt_execute($delPos)) {
+                    ad_log_error("Failed to delete position '$pos_name': " . mysqli_stmt_error($delPos));
+                    $txSuccess = false;
+                }
+            } else {
+                ad_log_error("Failed to prepare position deletion for '$pos_name': " . mysqli_error($conn));
+                $txSuccess = false;
+            }
+
+            /* Commit or rollback based on success */
+            if ($txSuccess) {
+                mysqli_commit($conn);
+            } else {
+                mysqli_rollback($conn);
+                ad_log_error("Transaction rolled back for '$pos_name' -- database left unchanged.");
+                continue;
             }
 
             /* Log */
             if (isset($_SESSION['user_id'])) {
                 $uid = (int)$_SESSION['user_id'];
                 $act = "Auto-declared winner: $winner_name for $pos_name ($vote_count votes)";
-                $logStmt = mysqli_prepare($conn, 
+                $logStmt = mysqli_prepare($conn,
                     "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
                 );
                 if ($logStmt) {
@@ -105,6 +182,33 @@ while ($pos = mysqli_fetch_assoc($expired)) {
                     mysqli_stmt_execute($logStmt);
                 }
             }
+        } else {
+            ad_log_error("Failed to insert election result for '$pos_name': " . mysqli_stmt_error($saveStmt));
+            mysqli_rollback($conn);
+        }
+    } else {
+        /* No candidates/votes found for this expired position -- still clean it up */
+        ad_log_error("No winner could be determined for expired position '$pos_name' (no candidates or votes).");
+
+        mysqli_begin_transaction($conn);
+        $txSuccess = true;
+
+        $delCand = mysqli_prepare($conn, "DELETE FROM candidates WHERE position = ?");
+        if ($delCand) {
+            mysqli_stmt_bind_param($delCand, "s", $pos_name);
+            if (!mysqli_stmt_execute($delCand)) $txSuccess = false;
+        }
+
+        $delPos = mysqli_prepare($conn, "DELETE FROM positions WHERE id = ?");
+        if ($delPos) {
+            mysqli_stmt_bind_param($delPos, "i", $pos_id);
+            if (!mysqli_stmt_execute($delPos)) $txSuccess = false;
+        }
+
+        if ($txSuccess) {
+            mysqli_commit($conn);
+        } else {
+            mysqli_rollback($conn);
         }
     }
 }

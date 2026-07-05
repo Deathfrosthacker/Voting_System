@@ -1,6 +1,10 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+/* FIX: Include auto_declare so expired elections are processed even when
+   voters (not just admins) visit the site. This ensures winners are
+   declared without requiring an admin to log in. */
+require_once "./auto_declare.php";
 
 /* SESSION TIMEOUT CHECK (30 minutes)*/
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
