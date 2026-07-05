@@ -426,7 +426,6 @@ function toggleAffiliation() {
 }
 </script>
 
-/* FIX: Completely rewritten popup system - now checks $_GET['status'] for ALL status types */
 <?php if (isset($_GET['status'])): ?>
 <script>
 <?php if ($_GET['status'] === "success"): ?>
