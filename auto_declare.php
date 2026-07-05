@@ -5,10 +5,6 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once "./config/connection.php";
 
-/* FIX: Removed session timeout check that was blocking auto-declaration.
-   The auto-declare engine must run regardless of session state
-   since it processes expired elections automatically. */
-
 /* Helper: log errors both to error_log and to a session flash for visibility */
 function ad_log_error(string $msg): void {
     $full = "auto_declare: " . $msg;
@@ -34,18 +30,7 @@ if (mysqli_query($conn, $createTable) === false) {
     ad_log_error("Failed to create election_results table: " . mysqli_error($conn));
 }
 
-/* ========================================================================
-   CRITICAL FIX: Changed from NOT IN (position_name only) to NOT EXISTS
-   that checks BOTH position_name AND end_date.
 
-   The old NOT IN subquery blocked a position from being processed if
-   *any* past election had the same position name. This meant positions
-   like "President of Kenya" could never be re-used.
-
-   The new NOT EXISTS check ensures we skip only the exact same election
-   (same name + same end date), allowing new elections with the same
-   position name but different dates to be processed.
-   ======================================================================== */
 $expired = mysqli_query($conn, "
     SELECT id, position_name, end_date
     FROM positions p
@@ -68,12 +53,11 @@ while ($pos = mysqli_fetch_assoc($expired)) {
     $pos_name = $pos['position_name'];
     $end_date = $pos['end_date'];
 
-    /* ================================================================
-       FIX 1: Safer GROUP BY -- include c.name to comply with
+    /* FIX 1: Safer GROUP BY -- include c.name to comply with
        ONLY_FULL_GROUP_BY mode (enabled by default in MySQL 5.7+).
        FIX 2: Use COUNT(v.candidate_id) instead of COUNT(v.id) since
        candidate_id is the known join column and always exists.
-       ================================================================ */
+       */
     $winnerStmt = mysqli_prepare($conn, "
         SELECT c.id, c.name, COUNT(v.candidate_id) AS vote_count
         FROM candidates c
@@ -98,10 +82,8 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         $winner_name = $winner['name'];
         $vote_count  = (int)$winner['vote_count'];
 
-        /* ================================================================
-           FIX 4: Wrap save + cleanup in a transaction so partial
-           failures don't leave the database in an inconsistent state.
-           ================================================================ */
+        /* FIX 4: Wrap save + cleanup in a transaction so partial failures don't leave the database in an inconsistent state.
+           */
         mysqli_begin_transaction($conn);
         $txSuccess = true;
 
