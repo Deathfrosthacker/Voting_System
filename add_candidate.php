@@ -2,12 +2,11 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./rbac_helper.php";
 
-// Security
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+// RBAC: Only admin and election_officer can manage candidates
+check_session_timeout();
+require_auth(['admin', 'election_officer']);
 
 /* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -108,7 +107,7 @@ if (isset($_POST['add_candidate'])) {
     mysqli_stmt_bind_param($checkPos, "s", $position);
     mysqli_stmt_execute($checkPos);
     $checkPosResult = mysqli_stmt_get_result($checkPos);
-    
+
     if ($checkPosResult === false || mysqli_num_rows($checkPosResult) == 0) {
         header("Location: add_candidate.php?status=invalid_position");
         exit();
@@ -123,7 +122,7 @@ if (isset($_POST['add_candidate'])) {
     mysqli_stmt_bind_param($checkStmt, "s", $position);
     mysqli_stmt_execute($checkStmt);
     $check_similar = mysqli_stmt_get_result($checkStmt);
-    
+
     $similar_found = false;
     $similar_name = "";
 

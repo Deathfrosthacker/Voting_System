@@ -1,12 +1,12 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./auto_declare.php"; // Run auto-processing first
+require_once "./auto_declare.php";
+require_once "./rbac_helper.php";
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+/* RBAC: Admin, Election Officer, and Observer can view results */
+check_session_timeout();
+require_auth(['admin', 'election_officer', 'observer']);
 
 $results = mysqli_query($conn, "
     SELECT * FROM election_results

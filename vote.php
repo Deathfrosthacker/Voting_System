@@ -2,6 +2,7 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./rbac_helper.php";
 
 /* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -12,11 +13,9 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/* AUTH PROTECTION */
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit();
-}
+/* RBAC: Only voters can access voting page */
+check_session_timeout();
+require_auth(['voter']);
 
 $user_id = $_SESSION['user_id'];
 $status  = "";

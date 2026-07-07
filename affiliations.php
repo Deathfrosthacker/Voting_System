@@ -2,12 +2,11 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./rbac_helper.php";
 
-// Security check
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
-    exit();
-}
+// RBAC: Only admin and election_officer can manage affiliations
+check_session_timeout();
+require_auth(['admin', 'election_officer']);
 
 /*    HANDLE ADD AFFILIATION */
 if (isset($_POST['add_affiliation'])) {
@@ -316,7 +315,7 @@ $affiliations = mysqli_query($conn, "
             <div class="affiliation-card" style="--aff-color: <?php echo htmlspecialchars($row['color_code']); ?>">
                 <div class="affiliation-info">
                     <h4>
-                        <span class="color-dot" style="background-color: <?php echo htmlspecialchars($row['color_code']); ?>;"></span>
+                        <span class="color-dot" style="background-color: <?php echo htmlspecialchars($row['color_code']); ?>"></span>
                         <?php echo htmlspecialchars($row['name']); ?>
                         <?php if ($row['name'] === 'Independent'): ?>
                             <span style="font-size: 11px; background: #f3f4f6; padding: 2px 8px; border-radius: 12px; color: #6b7280;">Default</span>

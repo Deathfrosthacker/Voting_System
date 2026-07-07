@@ -1,13 +1,12 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-require_once "./csrf_helper.php";  // ADDED: CSRF protection
+require_once "./csrf_helper.php";
+require_once "./rbac_helper.php";
 
-// Security check
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+// RBAC: Only admin can add other admins
+check_session_timeout();
+require_auth(['admin']);
 
 /* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -31,7 +30,7 @@ if (isset($_POST['add_admin'])) {
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
     /* FIX: Check for duplicate id_number and email before inserting */
-    
+
     // Check duplicate id_number
     $checkId = mysqli_prepare($conn, "SELECT id FROM users WHERE id_number = ? LIMIT 1");
     $id_number = trim($_POST['id_number']);

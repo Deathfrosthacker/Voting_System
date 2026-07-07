@@ -1,8 +1,9 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./rbac_helper.php";
 
-/* SESSION TIMEOUT CHECK (30 minutes)*/
+/* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
@@ -11,11 +12,9 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/*  ADMIN PROTECTION */
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+/* RBAC: Admin, Election Officer, and Observer can view votes */
+check_session_timeout();
+require_auth(['admin', 'election_officer', 'observer']);
 
 /*    FETCH POSITIONS */
 $positions = mysqli_query($conn, "

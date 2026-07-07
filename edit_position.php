@@ -2,12 +2,11 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
+require_once "./rbac_helper.php";
 
-// Security check
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+/* RBAC: Only admin and election_officer can edit positions */
+check_session_timeout();
+require_auth(['admin', 'election_officer']);
 
 /* SESSION TIMEOUT CHECK (30 minutes)*/
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {

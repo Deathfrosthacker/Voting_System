@@ -1,12 +1,10 @@
 <?php
 session_start();
 require_once "./config/connection.php";
-/* FIX: Include auto_declare so expired elections are processed even when
-   voters (not just admins) visit the site. This ensures winners are
-   declared without requiring an admin to log in. */
 require_once "./auto_declare.php";
+require_once "./rbac_helper.php";
 
-/* SESSION TIMEOUT CHECK (30 minutes)*/
+/* SESSION TIMEOUT CHECK (30 minutes) */
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
     session_destroy();
@@ -15,11 +13,9 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/* Protect voter page */
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'voter') {
-    header("Location: login.php");
-    exit();
-}
+/* RBAC: Only voters can access voter dashboard */
+check_session_timeout();
+require_auth(['voter']);
 
 $user_id = $_SESSION['user_id'];
 

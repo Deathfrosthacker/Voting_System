@@ -1,340 +1,344 @@
-<style>
-    /* Sidebar Styles */
-    .sidebar {
-        width: 250px;
-        background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
-        color: white;
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        z-index: 1000;
-        transition: transform 0.3s ease;
+<?php
+/**
+ * Sidebar Navigation Component
+ * Displays navigation menu based on user's RBAC role
+ * Roles: admin, election_officer, observer, voter
+ * 
+ * NOTE: This file should be included AFTER session_start() and rbac_helper.php
+ * have already been loaded by the parent page.
+ */
+
+// Do NOT call session_start() here — parent page already did it
+// Do NOT call require_observer() here — parent page handles auth
+
+$current_role = $_SESSION['role'] ?? '';
+$current_page = basename($_SERVER['PHP_SELF']);
+
+// Determine dashboard URL based on role
+$dashboard_url = 'voter_dashboard.php';
+if (is_official()) {
+    $dashboard_url = 'admin_dashboard.php';
+}
+
+// Navigation items with RBAC permissions
+$nav_items = [
+    // Dashboard - available to all authenticated users
+    [
+        'label' => 'Dashboard',
+        'icon' => 'fa-chart-line',
+        'url' => $dashboard_url,
+        'permission' => null, // All authenticated users
+        'roles' => ['admin', 'election_officer', 'observer', 'voter']
+    ],
+    // Elections / Positions
+    [
+        'label' => 'Manage Elections',
+        'icon' => 'fa-briefcase',
+        'url' => 'positions.php',
+        'permission' => 'manage_elections',
+        'roles' => ['admin', 'election_officer']
+    ],
+    // Candidates
+    [
+        'label' => 'Manage Candidates',
+        'icon' => 'fa-users',
+        'url' => 'add_candidate.php',
+        'permission' => 'manage_candidates',
+        'roles' => ['admin', 'election_officer']
+    ],
+    // Regions
+    [
+        'label' => 'Manage Regions',
+        'icon' => 'fa-globe',
+        'url' => 'regions.php',
+        'permission' => 'manage_regions',
+        'roles' => ['admin', 'election_officer']
+    ],
+    // Affiliations
+    [
+        'label' => 'Affiliations',
+        'icon' => 'fa-flag',
+        'url' => 'affiliations.php',
+        'permission' => 'manage_affiliations',
+        'roles' => ['admin', 'election_officer']
+    ],
+    // Officials Management (Admin only)
+    [
+        'label' => 'Manage Officials',
+        'icon' => 'fa-user-shield',
+        'url' => 'manage_officials.php',
+        'permission' => 'manage_officials',
+        'roles' => ['admin']
+    ],
+    // Admins (Admin only)
+    [
+        'label' => 'Manage Admins',
+        'icon' => 'fa-user-cog',
+        'url' => 'adminadd.php',
+        'permission' => 'manage_officials',
+        'roles' => ['admin']
+    ],
+    // Votes Overview
+    [
+        'label' => 'Votes Overview',
+        'icon' => 'fa-vote-yea',
+        'url' => 'votes.php',
+        'permission' => 'view_votes',
+        'roles' => ['admin', 'election_officer', 'observer']
+    ],
+    // Election Results
+    [
+        'label' => 'Election Results',
+        'icon' => 'fa-trophy',
+        'url' => 'winners.php',
+        'permission' => 'view_results',
+        'roles' => ['admin', 'election_officer', 'observer']
+    ],
+    // Activity Logs
+    [
+        'label' => 'Activity Logs',
+        'icon' => 'fa-history',
+        'url' => 'activity_logs.php',
+        'permission' => 'view_logs',
+        'roles' => ['admin', 'election_officer', 'observer']
+    ],
+    // Diagnostic (Admin only)
+    [
+        'label' => 'Diagnostics',
+        'icon' => 'fa-stethoscope',
+        'url' => 'diagnostic.php',
+        'permission' => 'system_settings',
+        'roles' => ['admin']
+    ],
+];
+
+// Filter nav items based on current user's role/permissions
+$visible_nav = [];
+foreach ($nav_items as $item) {
+    // Check if role is allowed
+    if (!in_array($current_role, $item['roles'])) {
+        continue;
     }
-
-    .sidebar-header {
-        padding: 30px 20px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    // Check permission if required
+    if ($item['permission'] !== null && !has_permission($item['permission'])) {
+        continue;
     }
+    $visible_nav[] = $item;
+}
+?>
 
-    .logo {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-    }
-
-    .logo h2 {
-        font-size: 20px;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.5px;
-    }
-
-    .logo p {
-        font-size: 12px;
-        opacity: 0.7;
-        margin: 2px 0 0 0;
-    }
-
-    .sidebar-nav {
-        flex: 1;
-        padding: 20px 0;
-        overflow-y: auto;
-    }
-
-    .nav-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 20px;
-        color: rgba(255, 255, 255, 0.8);
-        text-decoration: none;
-        transition: all 0.3s ease;
-        margin: 0 12px 6px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 500;
-    }
-
-    .nav-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
-        transform: translateX(4px);
-    }
-
-    .nav-item.active {
-        background: rgba(255, 255, 255, 0.15);
-        color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .nav-item svg {
-        flex-shrink: 0;
-    }
-
-    .sidebar-footer {
-        padding: 20px 0;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .nav-item.logout {
-        color: #fca5a5;
-    }
-
-    .nav-item.logout:hover {
-        background: rgba(239, 68, 68, 0.1);
-        color: #fee2e2;
-    }
-
-    /* Scrollbar Styling */
-    .sidebar-nav::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .sidebar-nav::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.05);
-    }
-
-    .sidebar-nav::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 3px;
-    }
-
-    .sidebar-nav::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-
-    /* Hamburger Menu Button */
-    .hamburger-btn {
-        display: none;
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        z-index: 1001;
-        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
-        border: none;
-        padding: 12px;
-        border-radius: 8px;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        transition: all 0.3s ease;
-    }
-
-    .hamburger-btn:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-    }
-
-    .hamburger-btn span {
-        display: block;
-        width: 25px;
-        height: 3px;
-        background: white;
-        margin: 5px 0;
-        border-radius: 2px;
-        transition: all 0.3s ease;
-    }
-
-    .hamburger-btn.active span:nth-child(1) {
-        transform: rotate(45deg) translate(8px, 8px);
-    }
-
-    .hamburger-btn.active span:nth-child(2) {
-        opacity: 0;
-    }
-
-    .hamburger-btn.active span:nth-child(3) {
-        transform: rotate(-45deg) translate(8px, -8px);
-    }
-
-    /* Overlay for mobile */
-    .sidebar-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 999;
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-
-    .sidebar-overlay.active {
-        opacity: 1;
-    }
-
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .sidebar {
-            transform: translateX(-100%);
-        }
-
-        .sidebar.active {
-            transform: translateX(0);
-        }
-
-        .hamburger-btn {
-            display: block;
-        }
-
-        .sidebar-overlay {
-            display: block;
-        }
-
-        /* Adjust main content margin on mobile */
-        .main-content {
-            margin-left: 0 !important;
-        }
-    }
-</style>
-
-<!-- Hamburger Menu Button (Mobile Only) -->
-<button class="hamburger-btn" id="hamburgerBtn">
-    <span></span>
-    <span></span>
-    <span></span>
-</button>
-
-<!-- Sidebar Overlay (Mobile Only) -->
-<div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-<!-- Sidebar Component -->
-<div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-        <div class="logo">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect width="40" height="40" rx="8" fill="white" opacity="0.1"/>
-                <path d="M20 10L28 15V25L20 30L12 25V15L20 10Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
-            </svg>
-            <div>
-                <h2>Vote System</h2>
-                <p>Admin Panel</p>
-            </div>
+<!-- Sidebar Navigation -->
+<aside class="sidebar-nav-container" id="sidebar">
+    <div class="sidebar-brand">
+        <div class="brand-icon">
+            <i class="fas fa-vote-yea"></i>
+        </div>
+        <div class="brand-text">
+            <h3>VoteSystem</h3>
+            <span class="role-badge-sidebar" style="background: <?php echo get_role_bg_color($current_role); ?>; color: <?php echo get_role_color($current_role); ?>">
+                <?php echo get_role_display_name($current_role); ?>
+            </span>
         </div>
     </div>
 
-    <nav class="sidebar-nav">
-        <a href="./admin_dashboard.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M3 9L10 3L17 9V17C17 17.5523 16.5523 18 16 18H4C3.44772 18 3 17.5523 3 17V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Dashboard</span>
+    <nav class="sidebar-menu">
+        <?php foreach ($visible_nav as $item): 
+            $is_active = ($current_page === $item['url']);
+        ?>
+        <a href="<?php echo $item['url']; ?>" class="sidebar-link <?php echo $is_active ? 'active' : ''; ?>">
+            <i class="fas <?php echo $item['icon']; ?>"></i>
+            <span><?php echo $item['label']; ?></span>
         </a>
-
-        <a href="./positions.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'positions.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-                <path d="M10 7V13M7 10H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <span>Positions</span>
-        </a>
-
-        <a href="./add_candidate.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'add_candidate.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M16 17V15C16 13.3431 14.6569 12 13 12H7C5.34315 12 4 13.3431 4 15V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            <span>Candidates</span>
-        </a>
-
-        <!-- NEW: Affiliations Link (IEBC Political Parties equivalent) -->
-        <a href="./affiliations.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'affiliations.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Affiliations</span>
-        </a>
-
-        <!-- NEW: Regions Link (IEBC Counties equivalent) -->
-        <a href="./regions.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'regions.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Regions</span>
-        </a>
-
-        <a href="./votes.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'votes.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            <span>Votes</span>
-        </a>
-
-        <a href="./adminadd.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'adminadd.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M16 17V15C16 13.3431 14.6569 12 13 12H7C5.34315 12 4 13.3431 4 15V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            <span>Add Admin</span>
-        </a>
-
-        <a href="./winners.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'winners.php' ? 'active' : ''; ?>">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M10 2L12.5 7H17.5L13.5 10.5L15 16L10 13L5 16L6.5 10.5L2.5 7H7.5L10 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-            </svg>
-            <span>Results</span>
-        </a>
+        <?php endforeach; ?>
     </nav>
 
-    <div class="sidebar-footer">
-        <a href="./logout.php" class="nav-item logout">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M13 3H16C16.5523 3 17 3.44772 17 4V16C17 16.5523 16.5523 17 16 17H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M8 13L3 10L8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M3 10H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+    <div class="sidebar-footer-nav">
+        <a href="logout.php" class="sidebar-link logout-link">
+            <i class="fas fa-sign-out-alt"></i>
             <span>Logout</span>
         </a>
     </div>
-</div>
+</aside>
+
+<!-- Mobile Toggle Button -->
+<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+</button>
+
+<!-- Overlay for mobile -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<style>
+/* Sidebar Container */
+.sidebar-nav-container {
+    width: 260px;
+    height: 100vh;
+    background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+    color: white;
+    position: fixed;
+    left: 0;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    transition: transform 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+}
+
+.sidebar-brand {
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-icon {
+    width: 44px;
+    height: 44px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.brand-text h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.role-badge-sidebar {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+/* Menu */
+.sidebar-menu {
+    flex: 1;
+    padding: 16px 12px;
+    overflow-y: auto;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: rgba(255,255,255,0.75);
+    text-decoration: none;
+    border-radius: 10px;
+    margin-bottom: 4px;
+    transition: all 0.25s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.sidebar-link:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    transform: translateX(4px);
+}
+
+.sidebar-link.active {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.sidebar-link i {
+    width: 20px;
+    text-align: center;
+    font-size: 16px;
+}
+
+.sidebar-link.logout-link {
+    color: #fca5a5;
+}
+
+.sidebar-link.logout-link:hover {
+    background: rgba(239,68,68,0.15);
+    color: #fecaca;
+}
+
+.sidebar-footer-nav {
+    padding: 16px 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Mobile Toggle */
+.sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1001;
+    background: #1e40af;
+    color: white;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 18px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+}
+
+/* Scrollbar */
+.sidebar-menu::-webkit-scrollbar {
+    width: 5px;
+}
+.sidebar-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-menu::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar-nav-container {
+        transform: translateX(-100%);
+    }
+    .sidebar-nav-container.open {
+        transform: translateX(0);
+    }
+    .sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sidebar-overlay.active {
+        display: block;
+    }
+    .main-content, .main, .content {
+        margin-left: 0 !important;
+    }
+}
+</style>
 
 <script>
-    // Sidebar toggle functionality
-    const hamburgerBtn = document.getElementById('hamburgerBtn');
+function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-    // Toggle sidebar
-    function toggleSidebar() {
-        hamburgerBtn.classList.toggle('active');
-        sidebar.classList.toggle('active');
-        sidebarOverlay.classList.toggle('active');
-
-        // Prevent body scroll when sidebar is open on mobile
-        if (sidebar.classList.contains('active')) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = '';
-        }
-    }
-
-    // Event listeners
-    hamburgerBtn.addEventListener('click', toggleSidebar);
-    sidebarOverlay.addEventListener('click', toggleSidebar);
-
-    // Close sidebar when clicking on a nav item (mobile)
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
-                toggleSidebar();
-            }
-        });
-    });
-
-    // Close sidebar on window resize if it's open
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
-            sidebar.classList.remove('active');
-            hamburgerBtn.classList.remove('active');
-            sidebarOverlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    });
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('active');
+}
 </script>

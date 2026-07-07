@@ -1,11 +1,11 @@
 <?php
 session_start();
 require_once "./config/connection.php";
+require_once "./rbac_helper.php";
 
-// Security check
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    die("Unauthorized access");
-}
+/* RBAC: Admin and Observer can view diagnostics */
+check_session_timeout();
+require_auth(['admin', 'observer']);
 
 echo "<h2>Database Structure Diagnostic</h2>";
 echo "<style>

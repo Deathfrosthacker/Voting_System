@@ -2,144 +2,148 @@
 session_start();
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
+require_once "./rbac_helper.php";
 
-/* FIX 1: Added missing admin role check - was only checking timeout, not role */
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
+/* RBAC: Only officials (admin, election_officer, observer) can access */
+check_session_timeout();
+require_auth(['admin', 'election_officer', 'observer']);
+
+$user_id = $_SESSION['user_id'];
+$role = $_SESSION['role'];
+
+/* Fetch statistics based on role permissions */
+$totalPositions = 0;
+$totalCandidates = 0;
+$totalVotes = 0;
+$totalVoters = 0;
+$totalOfficials = 0;
+
+// Only show management stats to those with permissions
+if (has_permission('manage_elections')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions");
+    $totalPositions = $res ? mysqli_fetch_assoc($res)['total'] : 0;
 }
 
-/* Simple admin protection */
-if (
-    isset($_SESSION['last_activity']) &&
-    (time() - $_SESSION['last_activity'] > 1800)
-) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php?timeout=1");
-    exit();
+if (has_permission('manage_candidates')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM candidates");
+    $totalCandidates = $res ? mysqli_fetch_assoc($res)['total'] : 0;
 }
 
-$_SESSION['last_activity'] = time();
+if (has_permission('view_votes')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM votes");
+    $totalVotes = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
+
+if (has_permission('manage_voters')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role = 'voter'");
+    $totalVoters = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
+
+if (has_permission('manage_officials')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM officials WHERE status = 'active'");
+    $totalOfficials = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
+
+/* Latest Election Results (for all officials) */
 $resultsQuery = "
     SELECT position_name, winner_name, total_votes, end_date
     FROM election_results
     ORDER BY declared_at DESC
-    LIMIT 3
+    LIMIT 5
 ";
 $resultsResult = mysqli_query($conn, $resultsQuery);
 
-$logsQuery = "
-    SELECT logs.activity, logs.log_time, users.name, users.id_number
-    FROM logs
-    JOIN users ON logs.user_id = users.id
-    ORDER BY logs.log_time DESC
-    LIMIT 10
-";
-$logsResult = mysqli_query($conn, $logsQuery);
-
-// ADDED: Error handling for logs query
-if ($logsResult === false) {
-    $logsError = "Error fetching logs: " . mysqli_error($conn);
+/* Activity Logs (based on permission) */
+$logsResult = false;
+if (has_permission('view_logs')) {
+    $logsQuery = "
+        SELECT logs.activity, logs.log_time, users.name, users.id_number
+        FROM logs
+        JOIN users ON logs.user_id = users.id
+        ORDER BY logs.log_time DESC
+        LIMIT 10
+    ";
+    $logsResult = mysqli_query($conn, $logsQuery);
 }
-
-//Helper function to get count of records in a table
-function getCount($conn, $table)
-{
-    $result = mysqli_query(
-        $conn,
-        "SELECT COUNT(*) AS total FROM $table"
-    );
-
-    if (!$result) {
-        error_log(mysqli_error($conn));
-        return 0;
-    }
-
-    return mysqli_fetch_assoc($result)['total'];
-}
-
-/* Fetch statistics */
-$totalPositions = getCount($conn, 'positions');
-$totalCandidates = getCount($conn, 'candidates');
-$totalVotes = getCount($conn, 'votes');
 
 /* Latest Position */
-$latestPosition = mysqli_query(
-    $conn,
-    "SELECT position_name, start_date, end_date 
-     FROM positions 
-     ORDER BY id DESC 
-     LIMIT 1"
-);
+$latestPosition = false;
+if (has_permission('manage_elections')) {
+    $latestPosition = mysqli_query($conn, "
+        SELECT position_name, start_date, end_date 
+        FROM positions 
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+}
 
 /* Latest Candidate */
-$latestCandidate = mysqli_query(
-    $conn,
-    "SELECT name, position, start_date, end_date 
-     FROM candidates 
-     ORDER BY id DESC 
-     LIMIT 1"
-);
+$latestCandidate = false;
+if (has_permission('manage_candidates')) {
+    $latestCandidate = mysqli_query($conn, "
+        SELECT name, position, start_date, end_date 
+        FROM candidates 
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+}
 
+/* Active Elections Count */
+$activeElections = 0;
+if (has_permission('manage_elections')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions WHERE CURDATE() BETWEEN start_date AND end_date");
+    $activeElections = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | Voting System</title>
+    <title>Dashboard | Voting System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
             min-height: 100vh;
+            background: #f1f5f9;
         }
-
-        /* MAIN CONTENT */
         .main-content {
-            margin-left: 240px;
+            margin-left: 260px;
             padding: 30px;
             min-height: 100vh;
         }
-
-        /* TOP BAR */
         .top-bar {
-            background: rgba(255, 255, 255, 0.95);
+            background: white;
             padding: 25px 30px;
-            border-radius: 15px;
+            border-radius: 16px;
             margin-bottom: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-
         .title-section h1 {
             color: #1e293b;
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 700;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            margin-bottom: 6px;
         }
-
         .title-section p {
             font-size: 14px;
             color: #64748b;
-            line-height: 1.6;
         }
-
+        .role-display {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
         .logout-btn {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: white;
@@ -151,121 +155,96 @@ $latestCandidate = mysqli_query(
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
-
         .logout-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
         }
-
-        /* STATS CARDS */
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 25px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
             margin-bottom: 30px;
         }
-
         .stat-card {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             position: relative;
             overflow: hidden;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
         }
-
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
         }
-
         .stat-card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            top: 0; left: 0; width: 100%; height: 4px;
         }
-
+        .stat-card.blue::before { background: linear-gradient(90deg, #3b82f6, #2563eb); }
+        .stat-card.purple::before { background: linear-gradient(90deg, #8b5cf6, #7c3aed); }
+        .stat-card.green::before { background: linear-gradient(90deg, #10b981, #059669); }
+        .stat-card.orange::before { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        .stat-card.red::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        .stat-card.teal::before { background: linear-gradient(90deg, #14b8a6, #0d9488); }
         .stat-card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
-
         .stat-card h3 {
             color: #64748b;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-
         .stat-icon {
-            width: 50px;
-            height: 50px;
+            width: 44px; height: 44px;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 20px;
             color: white;
         }
-
-        .icon-blue {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        }
-
-        .icon-purple {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-        }
-
-        .icon-green {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-
+        .icon-blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .icon-purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .icon-green { background: linear-gradient(135deg, #10b981, #059669); }
+        .icon-orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .icon-red { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .icon-teal { background: linear-gradient(135deg, #14b8a6, #0d9488); }
         .stat-card p {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #1e293b;
         }
-
-        /* INFO CARDS */
         .info-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
+            gap: 20px;
             margin-bottom: 30px;
         }
-
         .info-card {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: all 0.3s;
         }
-
         .info-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.08);
         }
-
         .info-card h3 {
             color: #64748b;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -274,106 +253,71 @@ $latestCandidate = mysqli_query(
             align-items: center;
             gap: 8px;
         }
-
-        .info-card h3 i {
-            color: #667eea;
-        }
-
+        .info-card h3 i { color: #2563eb; }
         .info-card .info-title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
             color: #1e293b;
-            margin: 10px 0;
+            margin: 8px 0;
         }
-
         .info-card .info-meta {
             color: #64748b;
             font-size: 13px;
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 10px;
+            margin-top: 8px;
         }
-
-        .info-card .info-meta i {
-            color: #667eea;
-        }
-
         .info-card .no-data {
             color: #94a3b8;
             font-size: 14px;
             font-style: italic;
         }
-
-        /* LOGS SECTION */
         .logs-section {
-            background: rgba(255, 255, 255, 0.95);
+            background: white;
             padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
-
         .logs-section h2 {
             color: #1e293b;
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
-
-        .logs-section h2 i {
-            color: #667eea;
-        }
-
-        /* TABLE */
+        .logs-section h2 i { color: #2563eb; }
         .table-container {
             overflow-x: auto;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
         }
-
         table {
             width: 100%;
             border-collapse: collapse;
             background: white;
         }
-
         table thead {
-            background: linear-gradient(135deg, #667eea 0%, #1e235e 100%);
+            background: linear-gradient(135deg, #1e40af, #1e3a8a);
         }
-
         table th {
-            padding: 16px;
+            padding: 14px 16px;
             text-align: left;
             color: white;
             font-weight: 600;
-            font-size: 13px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-
         table td {
-            padding: 16px;
+            padding: 14px 16px;
             color: #334155;
             font-size: 14px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid #f1f5f9;
         }
-
-        table tbody tr {
-            transition: all 0.2s ease;
-        }
-
-        table tbody tr:hover {
-            background: #f8fafc;
-        }
-
-        table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        /* BADGES */
+        table tbody tr { transition: all 0.2s; }
+        table tbody tr:hover { background: #f8fafc; }
         .badge {
             display: inline-block;
             padding: 4px 12px;
@@ -381,204 +325,168 @@ $latestCandidate = mysqli_query(
             font-size: 12px;
             font-weight: 600;
         }
-
-        .badge-success {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .badge-info {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        /* RESPONSIVE */
+        .badge-success { background: #d1fae5; color: #065f46; }
+        .badge-info { background: #dbeafe; color: #1e40af; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
         @media (max-width: 768px) {
-            .main-content {
-                margin-left: 0;
-                padding: 20px;
-            }
-
-            .top-bar {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 20px;
-            }
-
-            .title-section h1 {
-                font-size: 24px;
-            }
-
-            .stats,
-            .info-cards {
-                grid-template-columns: 1fr;
-            }
-
-            table {
-                font-size: 12px;
-            }
-
-            table th,
-            table td {
-                padding: 12px 8px;
-            }
+            .main-content { margin-left: 0; padding: 20px; }
+            .top-bar { flex-direction: column; gap: 16px; text-align: center; }
+            .stats, .info-cards { grid-template-columns: 1fr; }
         }
-
-        /* ANIMATIONS */
-
-
-
-
-
     </style>
 </head>
 <body>
 
-<!-- SIDEBAR -->
 <?php include 'sidebar.php'; ?>
 
-<!-- MAIN CONTENT -->
 <div class="main-content">
-
-    <!-- TOP BAR -->
     <div class="top-bar">
         <div class="title-section">
-            <h1><i class="fas fa-chart-line"></i> Dashboard Overview</h1>
-            <p>Monitor your voting system's performance and track all activities in real-time</p>
+            <h1><i class="fas fa-chart-line" style="color: #2563eb; margin-right: 10px;"></i>Dashboard Overview</h1>
+            <p>Monitor your voting system's performance and activities</p>
         </div>
-        <div class="logout-section">
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <span class="role-display" style="background: <?php echo get_role_bg_color($role); ?>; color: <?php echo get_role_color($role); ?>">
+                <i class="fas fa-shield-alt"></i>
+                <?php echo get_role_display_name($role); ?>
+            </span>
             <a href="logout.php" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i>
-                Logout
+                <i class="fas fa-sign-out-alt"></i> Logout
             </a>
         </div>
     </div>
 
-    <!-- STATS CARDS -->
+    <!-- STATS CARDS - Only show what user has permission to see -->
     <div class="stats">
-        <div class="stat-card">
+        <?php if (has_permission('manage_elections')): ?>
+        <div class="stat-card blue">
             <div class="stat-card-header">
                 <h3>Total Positions</h3>
-                <div class="stat-icon icon-blue">
-                    <i class="fas fa-briefcase"></i>
-                </div>
+                <div class="stat-icon icon-blue"><i class="fas fa-briefcase"></i></div>
             </div>
             <p><?php echo $totalPositions; ?></p>
         </div>
+        <?php endif; ?>
 
-        <div class="stat-card">
+        <?php if (has_permission('manage_candidates')): ?>
+        <div class="stat-card purple">
             <div class="stat-card-header">
                 <h3>Total Candidates</h3>
-                <div class="stat-icon icon-purple">
-                    <i class="fas fa-users"></i>
-                </div>
+                <div class="stat-icon icon-purple"><i class="fas fa-users"></i></div>
             </div>
             <p><?php echo $totalCandidates; ?></p>
         </div>
+        <?php endif; ?>
 
-        <div class="stat-card">
+        <?php if (has_permission('view_votes')): ?>
+        <div class="stat-card green">
             <div class="stat-card-header">
                 <h3>Total Votes Cast</h3>
-                <div class="stat-icon icon-green">
-                    <i class="fas fa-vote-yea"></i>
-                </div>
+                <div class="stat-icon icon-green"><i class="fas fa-vote-yea"></i></div>
             </div>
             <p><?php echo $totalVotes; ?></p>
         </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_voters')): ?>
+        <div class="stat-card orange">
+            <div class="stat-card-header">
+                <h3>Registered Voters</h3>
+                <div class="stat-icon icon-orange"><i class="fas fa-user-check"></i></div>
+            </div>
+            <p><?php echo $totalVoters; ?></p>
+        </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_elections')): ?>
+        <div class="stat-card teal">
+            <div class="stat-card-header">
+                <h3>Active Elections</h3>
+                <div class="stat-icon icon-teal"><i class="fas fa-bolt"></i></div>
+            </div>
+            <p><?php echo $activeElections; ?></p>
+        </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_officials')): ?>
+        <div class="stat-card red">
+            <div class="stat-card-header">
+                <h3>Active Officials</h3>
+                <div class="stat-icon icon-red"><i class="fas fa-user-shield"></i></div>
+            </div>
+            <p><?php echo $totalOfficials; ?></p>
+        </div>
+        <?php endif; ?>
     </div>
 
     <!-- INFO CARDS -->
     <div class="info-cards">
-        <!-- Latest Position -->
+        <?php if (has_permission('manage_elections') && $latestPosition): ?>
         <div class="info-card">
-            <h3>
-                <i class="fas fa-clipboard-list"></i>
-                Latest Position Added
-            </h3>
-
+            <h3><i class="fas fa-clipboard-list"></i>Latest Position Added</h3>
             <?php if (mysqli_num_rows($latestPosition) > 0): 
                 $pos = mysqli_fetch_assoc($latestPosition); ?>
-
-                <div class="info-title">
-                    <?php echo htmlspecialchars($pos['position_name']); ?>
-                </div>
+                <div class="info-title"><?php echo htmlspecialchars($pos['position_name']); ?></div>
                 <div class="info-meta">
                     <i class="fas fa-calendar-alt"></i>
                     <?php echo date('M d, Y', strtotime($pos['start_date'])); ?> 
-                    → 
+                    &rarr; 
                     <?php echo date('M d, Y', strtotime($pos['end_date'])); ?>
                 </div>
-
             <?php else: ?>
                 <p class="no-data">No position added yet</p>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
-        <!-- Latest Candidate -->
+        <?php if (has_permission('manage_candidates') && $latestCandidate): ?>
         <div class="info-card">
-            <h3>
-                <i class="fas fa-user-plus"></i>
-                Latest Candidate Added
-            </h3>
-
+            <h3><i class="fas fa-user-plus"></i>Latest Candidate Added</h3>
             <?php if (mysqli_num_rows($latestCandidate) > 0): 
                 $cand = mysqli_fetch_assoc($latestCandidate); ?>
-
-                <div class="info-title">
-                    <?php echo htmlspecialchars($cand['name']); ?>
-                </div>
-                <div class="info-meta">
-                    <i class="fas fa-tag"></i>
-                    <?php echo htmlspecialchars($cand['position']); ?>
-                </div>
+                <div class="info-title"><?php echo htmlspecialchars($cand['name']); ?></div>
+                <div class="info-meta"><i class="fas fa-tag"></i><?php echo htmlspecialchars($cand['position']); ?></div>
                 <div class="info-meta">
                     <i class="fas fa-calendar-alt"></i>
                     <?php echo date('M d, Y', strtotime($cand['start_date'])); ?> 
-                    → 
+                    &rarr; 
                     <?php echo date('M d, Y', strtotime($cand['end_date'])); ?>
                 </div>
-
             <?php else: ?>
                 <p class="no-data">No candidate added yet</p>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 
-    <!-- ELECTION RESULTS SECTION -->
+    <!-- ELECTION RESULTS -->
+    <?php if (has_permission('view_results')): ?>
     <div class="logs-section" style="margin-bottom: 30px;">
-        <h2>
-            <i class="fas fa-trophy"></i>
-            Recent Election Results
-        </h2>
-
+        <h2><i class="fas fa-trophy"></i> Recent Election Results</h2>
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th><i class="fas fa-briefcase"></i> Position</th>
-                        <th><i class="fas fa-crown"></i> Winner</th>
-                        <th><i class="fas fa-vote-yea"></i> Votes</th>
-                        <th><i class="fas fa-calendar-alt"></i> Ended On</th>
+                        <th><i class="fas fa-briefcase" style="margin-right: 6px;"></i>Position</th>
+                        <th><i class="fas fa-crown" style="margin-right: 6px;"></i>Winner</th>
+                        <th><i class="fas fa-vote-yea" style="margin-right: 6px;"></i>Votes</th>
+                        <th><i class="fas fa-calendar-alt" style="margin-right: 6px;"></i>Ended On</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (mysqli_num_rows($resultsResult) > 0): ?>
+                    <?php if ($resultsResult && mysqli_num_rows($resultsResult) > 0): ?>
                         <?php while ($res = mysqli_fetch_assoc($resultsResult)): ?>
                         <tr>
                             <td><strong><?php echo htmlspecialchars($res['position_name']); ?></strong></td>
-                            <td>
-                                <span class="badge badge-success">
-                                    <?php echo htmlspecialchars($res['winner_name']); ?>
-                                </span>
-                            </td>
-                            <td class="count" style="font-size: 18px; color: #667eea;"><?php echo $res['total_votes']; ?></td>
+                            <td><span class="badge badge-success"><?php echo htmlspecialchars($res['winner_name']); ?></span></td>
+                            <td style="font-size: 18px; color: #2563eb; font-weight: 700;"><?php echo $res['total_votes']; ?></td>
                             <td><?php echo date('M d, Y', strtotime($res['end_date'])); ?></td>
                         </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
                             <td colspan="4" style="text-align: center; color: #94a3b8; padding: 40px;">
-                                <i class="fas fa-hourglass-half" style="font-size: 48px; margin-bottom: 10px; display: block;"></i>
+                                <i class="fas fa-hourglass-half" style="font-size: 36px; margin-bottom: 10px; display: block; color: #cbd5e1;"></i>
                                 No elections have ended yet. Results will appear automatically.
                             </td>
                         </tr>
@@ -587,48 +495,36 @@ $latestCandidate = mysqli_query(
             </table>
         </div>
     </div>
+    <?php endif; ?>
 
-    <!-- LOGS SECTION -->
+    <!-- ACTIVITY LOGS -->
+    <?php if (has_permission('view_logs') && $logsResult): ?>
     <div class="logs-section">
-        <h2>
-            <i class="fas fa-history"></i>
-            Recent Activity Logs
-        </h2>
-
-        <?php if (isset($logsError)): ?>
-            <div style="background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-                <?php echo htmlspecialchars($logsError); ?>
-            </div>
-        <?php endif; ?>
-
+        <h2><i class="fas fa-history"></i> Recent Activity Logs</h2>
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th><i class="fas fa-id-card"></i> ID Number</th>
-                        <th><i class="fas fa-user"></i> Name</th>
-                        <th><i class="fas fa-tasks"></i> Activity</th>
-                        <th><i class="fas fa-clock"></i> Time</th>
+                        <th><i class="fas fa-id-card" style="margin-right: 6px;"></i>ID Number</th>
+                        <th><i class="fas fa-user" style="margin-right: 6px;"></i>Name</th>
+                        <th><i class="fas fa-tasks" style="margin-right: 6px;"></i>Activity</th>
+                        <th><i class="fas fa-clock" style="margin-right: 6px;"></i>Time</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if ($logsResult && mysqli_num_rows($logsResult) > 0): ?>
+                    <?php if (mysqli_num_rows($logsResult) > 0): ?>
                         <?php while ($log = mysqli_fetch_assoc($logsResult)): ?>
                         <tr>
                             <td><strong><?php echo htmlspecialchars($log['id_number']); ?></strong></td>
                             <td><?php echo htmlspecialchars($log['name']); ?></td>
-                            <td>
-                                <span class="badge badge-info">
-                                    <?php echo htmlspecialchars($log['activity']); ?>
-                                </span>
-                            </td>
+                            <td><span class="badge badge-info"><?php echo htmlspecialchars($log['activity']); ?></span></td>
                             <td><?php echo date('M d, Y - h:i A', strtotime($log['log_time'])); ?></td>
                         </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
                             <td colspan="4" style="text-align: center; color: #94a3b8; padding: 40px;">
-                                <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 10px; display: block;"></i>
+                                <i class="fas fa-inbox" style="font-size: 36px; margin-bottom: 10px; display: block; color: #cbd5e1;"></i>
                                 No activity logs yet
                             </td>
                         </tr>
@@ -637,6 +533,7 @@ $latestCandidate = mysqli_query(
             </table>
         </div>
     </div>
+    <?php endif; ?>
 
 </div>
 
@@ -644,12 +541,9 @@ $latestCandidate = mysqli_query(
 </html>
 
 <?php 
-/* FIX 2: Moved cleanup code BEFORE closing </html> and improved error handling */
-// Free result sets if they exist
 if (isset($resultsResult) && $resultsResult) mysqli_free_result($resultsResult);
 if (isset($logsResult) && $logsResult) mysqli_free_result($logsResult);
 if (isset($latestPosition) && $latestPosition) mysqli_free_result($latestPosition);
 if (isset($latestCandidate) && $latestCandidate) mysqli_free_result($latestCandidate);
-// Close connection
 if (isset($conn)) mysqli_close($conn);
 ?>
