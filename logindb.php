@@ -92,8 +92,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $_SESSION['role']       = $user['role'];
                 $_SESSION['last_activity'] = time();
 
-                $status = "success";
-                $role   = $user['role'];
+                /* FIX: Check if user needs to change password (first login after officer registration) */
+                $password_changed = $user['password_changed'] ?? 1;
+
+                if ($password_changed == 0) {
+                    $status = "first_login";
+                    $role   = $user['role'];
+                } else {
+                    $status = "success";
+                    $role   = $user['role'];
+                }
 
                 $user_id = $user['id'];
                 $activity = "Logged in";
@@ -162,6 +170,19 @@ end_login:
         <?php else: ?>
             window.location.href = "voter_dashboard.php";
         <?php endif; ?>
+    });
+
+<?php elseif ($status === "first_login"): ?>
+    /* FIX: First login after officer registration - force password change */
+    Swal.fire({
+        icon: 'warning',
+        title: 'Password Change Required',
+        text: 'Your account was registered by an election officer. Please change your password for security.',
+        confirmButtonColor: '#f59e0b',
+        allowOutsideClick: false,
+        allowEscapeKey: false
+    }).then(() => {
+        window.location.href = "change_password.php";
     });
 
 <?php elseif ($status === "suspended"): ?>

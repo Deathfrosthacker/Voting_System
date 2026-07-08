@@ -63,8 +63,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
                             /* FIX 2: Use prepared statement for INSERT with region_id instead of county */
+                            /* FIX: Self-registered users set password_changed = 1 (they chose their own password) */
                             $stmt = mysqli_prepare($conn, 
-                                "INSERT INTO users (id_number, name, email, date_of_birth, region_id, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                                "INSERT INTO users (id_number, name, email, date_of_birth, region_id, password, role, password_changed) VALUES (?, ?, ?, ?, ?, ?, ?, 1)"
                             );
                             /* FIX: Bind region_id as integer (can be NULL) */
                             mysqli_stmt_bind_param($stmt, "ssssiss", $id_number, $name, $email, $date_of_birth, $region_id, $hashedPassword, $role);

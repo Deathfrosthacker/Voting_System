@@ -48,6 +48,15 @@ $nav_items = [
         'permission' => 'manage_candidates',
         'roles' => ['admin', 'election_officer']
     ],
+    // Register Voter (Admin & Election Officer)
+    [
+        'label' => 'Register Voter',
+        'icon' => 'fa-user-plus',
+        'url' => 'register_voter.php',
+        'permission' => 'manage_voters',
+        'roles' => ['admin', 'election_officer']
+    ],
+
     // Regions
     [
         'label' => 'Manage Regions',
@@ -155,6 +164,10 @@ foreach ($nav_items as $item) {
     </nav>
 
     <div class="sidebar-footer-nav">
+        <a href="change_password.php?mode=optional" class="sidebar-link" style="color: rgba(255,255,255,0.75);">
+            <i class="fas fa-key"></i>
+            <span>Change Password</span>
+        </a>
         <a href="logout.php" class="sidebar-link logout-link">
             <i class="fas fa-sign-out-alt"></i>
             <span>Logout</span>

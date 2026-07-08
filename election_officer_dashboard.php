@@ -429,6 +429,14 @@ if (has_permission('manage_elections')) {
                 <p>Manage parties and groups</p>
             </div>
         </a>
+        <a href="register_voter.php" class="action-card">
+            <div class="action-icon" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="fas fa-user-plus"></i></div>
+            <div class="action-content">
+                <h4>Register Voter</h4>
+                <p>Register voters on their behalf</p>
+            </div>
+        </a>
+
     </div>
 
     <!-- STATS CARDS -->
