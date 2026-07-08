@@ -167,18 +167,20 @@ echo "<ul>";
 
 // Check if there's a unique constraint on user_id
 $hasUserUnique = mysqli_query($conn, "
-    SELECT * FROM information_schema.statistics 
-    WHERE table_schema = DATABASE() 
-    AND table_name = 'votes' 
-    AND column_name = 'user_id' 
-    AND non_unique = 0
+    SELECT s.INDEX_NAME, COUNT(*) as col_count, GROUP_CONCAT(s.column_name ORDER BY s.seq_in_index) as columns
+    FROM information_schema.statistics s
+    WHERE s.table_schema = DATABASE() 
+    AND s.table_name = 'votes' 
+    AND s.non_unique = 0
+    GROUP BY s.INDEX_NAME
+    HAVING col_count = 1 AND columns = 'user_id'
 ");
 
 if (mysqli_num_rows($hasUserUnique) > 0) {
-    echo "<li class='error'>⚠️ There is a UNIQUE constraint on 'user_id' in votes table. This prevents users from voting for multiple positions! You should remove this constraint.</li>";
+    echo "<li class='error'>⚠️ There is a UNIQUE constraint on 'user_id' ALONE in votes table. This prevents users from voting for multiple positions! You should remove this constraint.</li>";
     echo "<li><strong>Fix SQL:</strong> <code>ALTER TABLE votes DROP INDEX user_id;</code></li>";
 } else {
-    echo "<li class='success'>✓ No problematic unique constraint on user_id alone.</li>";
+    echo "<li class='success'>✓ No problematic standalone unique constraint on user_id alone. Composite unique keys (user_id + candidate_id) are correct and allow voting for multiple positions.</li>";
 }
 
 // Check for proper composite unique key

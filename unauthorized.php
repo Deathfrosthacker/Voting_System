@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once "./rbac_helper.php";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -143,10 +144,17 @@ session_start();
         <h1>Access Denied</h1>
         <p>You don't have permission to access this page. This area requires higher privileges than your current role allows.</p>
 
-        <?php if (isset($_SESSION['role'])): 
-            require_once "./rbac_helper.php";
+        <?php 
+        if (isset($_SESSION['role'])): 
             $role = $_SESSION['role'];
             $permissions = get_role_permissions($role);
+            // Determine correct dashboard URL
+            $dashboard_url = match($role) {
+                'admin' => 'admin_dashboard.php',
+                'election_officer' => 'election_officer_dashboard.php',
+                'observer' => 'observer_dashboard.php',
+                default => 'voter_dashboard.php'
+            };
         ?>
         <div class="role-info">
             <h3>Your Current Role</h3>
@@ -173,7 +181,7 @@ session_start();
         <?php endif; ?>
 
         <div>
-            <a href="<?php echo isset($_SESSION['role']) && $_SESSION['role'] === 'voter' ? 'voter_dashboard.php' : 'admin_dashboard.php'; ?>" class="btn btn-primary">
+            <a href="<?php echo isset($dashboard_url) ? $dashboard_url : 'login.php'; ?>" class="btn btn-primary">
                 <i class="fas fa-home"></i> Go to Dashboard
             </a>
             <a href="logout.php" class="btn btn-secondary">

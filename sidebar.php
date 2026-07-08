@@ -14,15 +14,17 @@
 $current_role = $_SESSION['role'] ?? '';
 $current_page = basename($_SERVER['PHP_SELF']);
 
-// Determine dashboard URL based on role
-$dashboard_url = 'voter_dashboard.php';
-if (is_official()) {
-    $dashboard_url = 'admin_dashboard.php';
-}
+// Determine dashboard URL based on role - EACH ROLE HAS THEIR OWN DASHBOARD
+$dashboard_url = match($current_role) {
+    'admin' => 'admin_dashboard.php',
+    'election_officer' => 'election_officer_dashboard.php',
+    'observer' => 'observer_dashboard.php',
+    default => 'voter_dashboard.php'
+};
 
 // Navigation items with RBAC permissions
 $nav_items = [
-    // Dashboard - available to all authenticated users
+    // Dashboard - available to all authenticated users (each goes to their own)
     [
         'label' => 'Dashboard',
         'icon' => 'fa-chart-line',

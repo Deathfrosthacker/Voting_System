@@ -151,10 +151,14 @@ end_login:
         confirmButtonColor: '#1e40af'
     }).then(() => {
         <?php 
-        // RBAC-aware redirect based on role
-        if ($role === "admin" || $role === "election_officer" || $role === "observer"): 
+        // ROLE-BASED REDIRECT: Each role gets their own dashboard
+        if ($role === "admin"): 
         ?>
             window.location.href = "admin_dashboard.php";
+        <?php elseif ($role === "election_officer"): ?>
+            window.location.href = "election_officer_dashboard.php";
+        <?php elseif ($role === "observer"): ?>
+            window.location.href = "observer_dashboard.php";
         <?php else: ?>
             window.location.href = "voter_dashboard.php";
         <?php endif; ?>

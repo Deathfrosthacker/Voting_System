@@ -4,31 +4,38 @@ require_once "./config/connection.php";
 require_once "./auto_declare.php";
 require_once "./rbac_helper.php";
 
-/* RBAC: Only admin can access */
+/* RBAC: Only election_officer can access */
 check_session_timeout();
-require_auth(['admin']);
+require_auth(['election_officer']);
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
 
-/* Admin sees everything */
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions");
-$totalPositions = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+/* Fetch statistics based on role permissions */
+$totalPositions = 0;
+$totalCandidates = 0;
+$totalVotes = 0;
+$totalVoters = 0;
 
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM candidates");
-$totalCandidates = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+if (has_permission('manage_elections')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions");
+    $totalPositions = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM votes");
-$totalVotes = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+if (has_permission('manage_candidates')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM candidates");
+    $totalCandidates = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role = 'voter'");
-$totalVoters = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+if (has_permission('view_votes')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM votes");
+    $totalVotes = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM officials WHERE status = 'active'");
-$totalOfficials = $res ? mysqli_fetch_assoc($res)['total'] : 0;
-
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role = 'admin'");
-$totalAdmins = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+if (has_permission('manage_voters')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role = 'voter'");
+    $totalVoters = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 
 /* Latest Election Results */
 $resultsQuery = "
@@ -39,43 +46,47 @@ $resultsQuery = "
 ";
 $resultsResult = mysqli_query($conn, $resultsQuery);
 
-/* Activity Logs */
-$logsQuery = "
-    SELECT logs.activity, logs.log_time, users.name, users.id_number, users.role
-    FROM logs
-    JOIN users ON logs.user_id = users.id
-    ORDER BY logs.log_time DESC
-    LIMIT 10
-";
-$logsResult = mysqli_query($conn, $logsQuery);
+/* Activity Logs (based on permission) */
+$logsResult = false;
+if (has_permission('view_logs')) {
+    $logsQuery = "
+        SELECT logs.activity, logs.log_time, users.name, users.id_number
+        FROM logs
+        JOIN users ON logs.user_id = users.id
+        ORDER BY logs.log_time DESC
+        LIMIT 10
+    ";
+    $logsResult = mysqli_query($conn, $logsQuery);
+}
 
 /* Latest Position */
-$latestPosition = mysqli_query($conn, "
-    SELECT position_name, start_date, end_date 
-    FROM positions 
-    ORDER BY id DESC 
-    LIMIT 1
-");
+$latestPosition = false;
+if (has_permission('manage_elections')) {
+    $latestPosition = mysqli_query($conn, "
+        SELECT position_name, start_date, end_date 
+        FROM positions 
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+}
 
 /* Latest Candidate */
-$latestCandidate = mysqli_query($conn, "
-    SELECT name, position, start_date, end_date 
-    FROM candidates 
-    ORDER BY id DESC 
-    LIMIT 1
-");
+$latestCandidate = false;
+if (has_permission('manage_candidates')) {
+    $latestCandidate = mysqli_query($conn, "
+        SELECT name, position, start_date, end_date 
+        FROM candidates 
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+}
 
 /* Active Elections Count */
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions WHERE CURDATE() BETWEEN start_date AND end_date");
-$activeElections = $res ? mysqli_fetch_assoc($res)['total'] : 0;
-
-/* System Health */
-$totalRegions = 0;
-$totalAffiliations = 0;
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM regions");
-$totalRegions = $res ? mysqli_fetch_assoc($res)['total'] : 0;
-$res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM affiliations");
-$totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+$activeElections = 0;
+if (has_permission('manage_elections')) {
+    $res = mysqli_query($conn, "SELECT COUNT(*) AS total FROM positions WHERE CURDATE() BETWEEN start_date AND end_date");
+    $activeElections = $res ? mysqli_fetch_assoc($res)['total'] : 0;
+}
 ?>
 
 <!DOCTYPE html>
@@ -83,7 +94,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | Voting System</title>
+    <title>Election Officer Dashboard | Voting System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -146,7 +157,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
         }
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -172,9 +183,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
         .stat-card.purple::before { background: linear-gradient(90deg, #8b5cf6, #7c3aed); }
         .stat-card.green::before { background: linear-gradient(90deg, #10b981, #059669); }
         .stat-card.orange::before { background: linear-gradient(90deg, #f59e0b, #d97706); }
-        .stat-card.red::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
         .stat-card.teal::before { background: linear-gradient(90deg, #14b8a6, #0d9488); }
-        .stat-card.pink::before { background: linear-gradient(90deg, #ec4899, #db2777); }
         .stat-card-header {
             display: flex;
             justify-content: space-between;
@@ -201,9 +210,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
         .icon-purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
         .icon-green { background: linear-gradient(135deg, #10b981, #059669); }
         .icon-orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
-        .icon-red { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .icon-teal { background: linear-gradient(135deg, #14b8a6, #0d9488); }
-        .icon-pink { background: linear-gradient(135deg, #ec4899, #db2777); }
         .stat-card p {
             font-size: 32px;
             font-weight: 700;
@@ -312,13 +319,9 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
         .badge-success { background: #d1fae5; color: #065f46; }
         .badge-info { background: #dbeafe; color: #1e40af; }
         .badge-warning { background: #fef3c7; color: #92400e; }
-        .badge-admin { background: #fee2e2; color: #991b1b; }
-        .badge-officer { background: #dbeafe; color: #1e40af; }
-        .badge-observer { background: #d1fae5; color: #065f46; }
-        .badge-voter { background: #f3f4f6; color: #6b7280; }
         .quick-actions {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 16px;
             margin-bottom: 30px;
         }
@@ -333,35 +336,32 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             border: 2px solid transparent;
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 16px;
         }
         .action-card:hover {
             transform: translateY(-3px);
             box-shadow: 0 12px 24px rgba(0,0,0,0.1);
-            border-color: #dc2626;
+            border-color: #2563eb;
         }
         .action-icon {
-            width: 44px; height: 44px;
-            border-radius: 10px;
+            width: 48px; height: 48px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 20px;
             color: white;
             flex-shrink: 0;
         }
         .action-icon.positions { background: linear-gradient(135deg, #3b82f6, #2563eb); }
         .action-icon.candidates { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
-        .action-icon.officials { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        .action-icon.admins { background: linear-gradient(135deg, #ec4899, #db2777); }
         .action-icon.regions { background: linear-gradient(135deg, #10b981, #059669); }
         .action-icon.affiliations { background: linear-gradient(135deg, #f59e0b, #d97706); }
-        .action-icon.diagnostic { background: linear-gradient(135deg, #6b7280, #4b5563); }
         .action-content h4 {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 600;
             color: #1e293b;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
         }
         .action-content p {
             font-size: 12px;
@@ -382,8 +382,8 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
 <div class="main-content">
     <div class="top-bar">
         <div class="title-section">
-            <h1><i class="fas fa-crown" style="color: #dc2626; margin-right: 10px;"></i>System Administrator</h1>
-            <p>Full system control and oversight</p>
+            <h1><i class="fas fa-user-tie" style="color: #2563eb; margin-right: 10px;"></i>Election Officer Dashboard</h1>
+            <p>Manage elections, candidates, and monitor voting activity</p>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
             <span class="role-display" style="background: <?php echo get_role_bg_color($role); ?>; color: <?php echo get_role_color($role); ?>">
@@ -405,28 +405,14 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             <div class="action-icon positions"><i class="fas fa-briefcase"></i></div>
             <div class="action-content">
                 <h4>Manage Elections</h4>
-                <p>Create and edit positions</p>
+                <p>Create and edit voting positions</p>
             </div>
         </a>
         <a href="add_candidate.php" class="action-card">
             <div class="action-icon candidates"><i class="fas fa-users"></i></div>
             <div class="action-content">
                 <h4>Manage Candidates</h4>
-                <p>Add and manage candidates</p>
-            </div>
-        </a>
-        <a href="manage_officials.php" class="action-card">
-            <div class="action-icon officials"><i class="fas fa-user-shield"></i></div>
-            <div class="action-content">
-                <h4>Manage Officials</h4>
-                <p>Election officers & observers</p>
-            </div>
-        </a>
-        <a href="adminadd.php" class="action-card">
-            <div class="action-icon admins"><i class="fas fa-user-cog"></i></div>
-            <div class="action-content">
-                <h4>Manage Admins</h4>
-                <p>Add system administrators</p>
+                <p>Add candidates to positions</p>
             </div>
         </a>
         <a href="regions.php" class="action-card">
@@ -440,20 +426,14 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             <div class="action-icon affiliations"><i class="fas fa-flag"></i></div>
             <div class="action-content">
                 <h4>Affiliations</h4>
-                <p>Parties and groups</p>
-            </div>
-        </a>
-        <a href="diagnostic.php" class="action-card">
-            <div class="action-icon diagnostic"><i class="fas fa-stethoscope"></i></div>
-            <div class="action-content">
-                <h4>Diagnostics</h4>
-                <p>System health check</p>
+                <p>Manage parties and groups</p>
             </div>
         </a>
     </div>
 
     <!-- STATS CARDS -->
     <div class="stats">
+        <?php if (has_permission('manage_elections')): ?>
         <div class="stat-card blue">
             <div class="stat-card-header">
                 <h3>Total Positions</h3>
@@ -461,6 +441,9 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </div>
             <p><?php echo $totalPositions; ?></p>
         </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_candidates')): ?>
         <div class="stat-card purple">
             <div class="stat-card-header">
                 <h3>Total Candidates</h3>
@@ -468,6 +451,9 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </div>
             <p><?php echo $totalCandidates; ?></p>
         </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('view_votes')): ?>
         <div class="stat-card green">
             <div class="stat-card-header">
                 <h3>Total Votes Cast</h3>
@@ -475,6 +461,9 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </div>
             <p><?php echo $totalVotes; ?></p>
         </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_voters')): ?>
         <div class="stat-card orange">
             <div class="stat-card-header">
                 <h3>Registered Voters</h3>
@@ -482,20 +471,9 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </div>
             <p><?php echo $totalVoters; ?></p>
         </div>
-        <div class="stat-card red">
-            <div class="stat-card-header">
-                <h3>Active Officials</h3>
-                <div class="stat-icon icon-red"><i class="fas fa-user-shield"></i></div>
-            </div>
-            <p><?php echo $totalOfficials; ?></p>
-        </div>
-        <div class="stat-card pink">
-            <div class="stat-card-header">
-                <h3>Administrators</h3>
-                <div class="stat-icon icon-pink"><i class="fas fa-user-cog"></i></div>
-            </div>
-            <p><?php echo $totalAdmins; ?></p>
-        </div>
+        <?php endif; ?>
+
+        <?php if (has_permission('manage_elections')): ?>
         <div class="stat-card teal">
             <div class="stat-card-header">
                 <h3>Active Elections</h3>
@@ -503,11 +481,12 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </div>
             <p><?php echo $activeElections; ?></p>
         </div>
+        <?php endif; ?>
     </div>
 
     <!-- INFO CARDS -->
     <div class="info-cards">
-        <?php if ($latestPosition): ?>
+        <?php if (has_permission('manage_elections') && $latestPosition): ?>
         <div class="info-card">
             <h3><i class="fas fa-clipboard-list"></i>Latest Position Added</h3>
             <?php if (mysqli_num_rows($latestPosition) > 0): 
@@ -525,7 +504,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
         </div>
         <?php endif; ?>
 
-        <?php if ($latestCandidate): ?>
+        <?php if (has_permission('manage_candidates') && $latestCandidate): ?>
         <div class="info-card">
             <h3><i class="fas fa-user-plus"></i>Latest Candidate Added</h3>
             <?php if (mysqli_num_rows($latestCandidate) > 0): 
@@ -546,6 +525,7 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
     </div>
 
     <!-- ELECTION RESULTS -->
+    <?php if (has_permission('view_results')): ?>
     <div class="logs-section" style="margin-bottom: 30px;">
         <h2><i class="fas fa-trophy"></i> Recent Election Results</h2>
         <div class="table-container">
@@ -580,9 +560,10 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
             </table>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- ACTIVITY LOGS -->
-    <?php if ($logsResult): ?>
+    <?php if (has_permission('view_logs') && $logsResult): ?>
     <div class="logs-section">
         <h2><i class="fas fa-history"></i> Recent Activity Logs</h2>
         <div class="table-container">
@@ -591,33 +572,23 @@ $totalAffiliations = $res ? mysqli_fetch_assoc($res)['total'] : 0;
                     <tr>
                         <th><i class="fas fa-id-card" style="margin-right: 6px;"></i>ID Number</th>
                         <th><i class="fas fa-user" style="margin-right: 6px;"></i>Name</th>
-                        <th><i class="fas fa-user-tag" style="margin-right: 6px;"></i>Role</th>
                         <th><i class="fas fa-tasks" style="margin-right: 6px;"></i>Activity</th>
                         <th><i class="fas fa-clock" style="margin-right: 6px;"></i>Time</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (mysqli_num_rows($logsResult) > 0): ?>
-                        <?php while ($log = mysqli_fetch_assoc($logsResult)): 
-                            $log_role = $log['role'] ?? 'voter';
-                            $badge_class = match($log_role) {
-                                'admin' => 'badge-admin',
-                                'election_officer' => 'badge-officer',
-                                'observer' => 'badge-observer',
-                                default => 'badge-voter'
-                            };
-                        ?>
+                        <?php while ($log = mysqli_fetch_assoc($logsResult)): ?>
                         <tr>
                             <td><strong><?php echo htmlspecialchars($log['id_number']); ?></strong></td>
                             <td><?php echo htmlspecialchars($log['name']); ?></td>
-                            <td><span class="badge <?php echo $badge_class; ?>"><?php echo ucfirst($log_role); ?></span></td>
                             <td><span class="badge badge-info"><?php echo htmlspecialchars($log['activity']); ?></span></td>
                             <td><?php echo date('M d, Y - h:i A', strtotime($log['log_time'])); ?></td>
                         </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="5" style="text-align: center; color: #94a3b8; padding: 40px;">
+                            <td colspan="4" style="text-align: center; color: #94a3b8; padding: 40px;">
                                 <i class="fas fa-inbox" style="font-size: 36px; margin-bottom: 10px; display: block; color: #cbd5e1;"></i>
                                 No activity logs yet
                             </td>
