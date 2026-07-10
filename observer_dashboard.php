@@ -14,6 +14,7 @@ require_auth(['observer']);
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
+$role_hint = '?role=' . urlencode($role);
 
 /* Observer stats - read-only view */
 $totalPositions = 0;
@@ -383,21 +384,21 @@ $activeElectionsResult = mysqli_query($conn, $activeElectionsQuery);
 
     <!-- QUICK LINKS -->
     <div class="quick-links">
-        <a href="activity_logs.php" class="quick-link">
+        <a href="activity_logs.php<?php echo $role_hint; ?>" class="quick-link">
             <div class="quick-link-icon logs"><i class="fas fa-history"></i></div>
             <div class="quick-link-content">
                 <h4>Activity Logs</h4>
                 <p>View complete audit trail</p>
             </div>
         </a>
-        <a href="winners.php" class="quick-link">
+        <a href="winners.php<?php echo $role_hint; ?>" class="quick-link">
             <div class="quick-link-icon results"><i class="fas fa-trophy"></i></div>
             <div class="quick-link-content">
                 <h4>Election Results</h4>
                 <p>View completed election winners</p>
             </div>
         </a>
-        <a href="votes.php" class="quick-link">
+        <a href="votes.php<?php echo $role_hint; ?>" class="quick-link">
             <div class="quick-link-icon votes"><i class="fas fa-vote-yea"></i></div>
             <div class="quick-link-content">
                 <h4>Votes Overview</h4>

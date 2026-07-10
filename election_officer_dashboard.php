@@ -13,7 +13,7 @@ require_auth(['election_officer']);
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
-
+$role_hint = '?role=' . urlencode($role);
 /* Fetch statistics based on role permissions */
 $totalPositions = 0;
 $totalCandidates = 0;
@@ -404,35 +404,35 @@ if (has_permission('manage_elections')) {
         <i class="fas fa-bolt" style="color: #f59e0b;"></i> Quick Actions
     </h2>
     <div class="quick-actions">
-        <a href="positions.php" class="action-card">
+        <a href="positions.php<?php echo $role_hint; ?>" class="action-card">
             <div class="action-icon positions"><i class="fas fa-briefcase"></i></div>
             <div class="action-content">
                 <h4>Manage Elections</h4>
                 <p>Create and edit voting positions</p>
             </div>
         </a>
-        <a href="add_candidate.php" class="action-card">
+        <a href="add_candidate.php<?php echo $role_hint; ?>" class="action-card">
             <div class="action-icon candidates"><i class="fas fa-users"></i></div>
             <div class="action-content">
                 <h4>Manage Candidates</h4>
                 <p>Add candidates to positions</p>
             </div>
         </a>
-        <a href="regions.php" class="action-card">
+        <a href="regions.php<?php echo $role_hint; ?>" class="action-card">
             <div class="action-icon regions"><i class="fas fa-globe"></i></div>
             <div class="action-content">
                 <h4>Manage Regions</h4>
                 <p>Configure voting regions</p>
             </div>
         </a>
-        <a href="affiliations.php" class="action-card">
+        <a href="affiliations.php<?php echo $role_hint; ?>" class="action-card">
             <div class="action-icon affiliations"><i class="fas fa-flag"></i></div>
             <div class="action-content">
                 <h4>Affiliations</h4>
                 <p>Manage parties and groups</p>
             </div>
         </a>
-        <a href="register_voter.php" class="action-card">
+        <a href="register_voter.php<?php echo $role_hint; ?>" class="action-card">
             <div class="action-icon" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="fas fa-user-plus"></i></div>
             <div class="action-content">
                 <h4>Register Voter</h4>

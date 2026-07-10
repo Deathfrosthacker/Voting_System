@@ -338,7 +338,10 @@ function require_auth(array $allowed_roles = [], string $redirect_url = "login.p
 
     // Check role restriction
     if (!empty($allowed_roles) && !in_array($_SESSION['role'], $allowed_roles)) {
-        header("Location: unauthorized.php");
+        if ($redirect_url === 'unauthorized.php' && isset($_SESSION['role'])) {
+            $redirect_url .= '?role=' . urlencode($_SESSION['role']);
+        }
+        header("Location: $redirect_url");
         exit();
     }
 }

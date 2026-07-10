@@ -1,8 +1,6 @@
 <?php
-// FIXED: Only start session if not already active
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+
+// Do not auto-start a session here; calling pages must manage role-specific session handling.
 require_once "./config/connection.php";
 
 /* Helper: log errors both to error_log and to a session flash for visibility */
@@ -34,7 +32,7 @@ if (mysqli_query($conn, $createTable) === false) {
 $expired = mysqli_query($conn, "
     SELECT id, position_name, end_date
     FROM positions p
-    WHERE end_date < CURDATE()
+    WHERE end_date <= CURDATE()
       AND NOT EXISTS (
           SELECT 1 FROM election_results er
           WHERE er.position_name = p.position_name

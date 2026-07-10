@@ -110,14 +110,6 @@ $nav_items = [
         'permission' => 'view_logs',
         'roles' => ['admin', 'election_officer', 'observer']
     ],
-    // Diagnostic (Admin only)
-    [
-        'label' => 'Diagnostics',
-        'icon' => 'fa-stethoscope',
-        'url' => 'diagnostic.php',
-        'permission' => 'system_settings',
-        'roles' => ['admin']
-    ],
 ];
 
 // Filter nav items based on current user's role/permissions
@@ -133,6 +125,19 @@ foreach ($nav_items as $item) {
     }
     $visible_nav[] = $item;
 }
+
+// Shared pages require explicit role hint when multiple role-specific sessions exist
+$role_hint_query = isset($_SESSION['role']) ? '?role=' . urlencode($_SESSION['role']) : '';
+$role_hint_urls = [
+    'positions.php',
+    'add_candidate.php',
+    'register_voter.php',
+    'regions.php',
+    'affiliations.php',
+    'votes.php',
+    'winners.php',
+    'activity_logs.php'
+];
 ?>
 
 <!-- Sidebar Navigation -->
@@ -152,8 +157,12 @@ foreach ($nav_items as $item) {
     <nav class="sidebar-menu">
         <?php foreach ($visible_nav as $item): 
             $is_active = ($current_page === $item['url']);
+            $url = $item['url'];
+            if ($role_hint_query && in_array($url, $role_hint_urls, true)) {
+                $url .= $role_hint_query;
+            }
         ?>
-        <a href="<?php echo $item['url']; ?>" class="sidebar-link <?php echo $is_active ? 'active' : ''; ?>">
+        <a href="<?php echo $url; ?>" class="sidebar-link <?php echo $is_active ? 'active' : ''; ?>">
             <i class="fas <?php echo $item['icon']; ?>"></i>
             <span><?php echo $item['label']; ?></span>
         </a>

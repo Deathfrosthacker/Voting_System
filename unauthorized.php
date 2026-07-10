@@ -2,11 +2,7 @@
 // FIX: Don't call session_start here - rbac_helper.php handles it
 require_once "./rbac_helper.php";
 
-// Ensure session is active with proper cookie path
-if (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.cookie_path', '/');
-    session_start();
-}
+start_role_session();
 
 // Determine correct dashboard URL based on role
 $role = $_SESSION['role'] ?? '';

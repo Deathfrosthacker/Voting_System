@@ -543,86 +543,12 @@ function toggleVisibility(fieldId, btn) {
     }
 }
 
-// Password strength checker
-const newPassword = document.getElementById('new_password');
-const strengthFill = document.getElementById('strengthFill');
-const strengthText = document.getElementById('strengthText');
-const submitBtn = document.getElementById('submitBtn');
-
-const requirements = {
-    length: { regex: /.{8,}/, el: document.getElementById('req-length') },
-    upper: { regex: /[A-Z]/, el: document.getElementById('req-upper') },
-    lower: { regex: /[a-z]/, el: document.getElementById('req-lower') },
-    number: { regex: /[0-9]/, el: document.getElementById('req-number') },
-    special: { regex: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/?]/, el: document.getElementById('req-special') }
-};
-
-function checkStrength(password) {
-    let score = 0;
-    let metCount = 0;
-
-    for (let key in requirements) {
-        const req = requirements[key];
-        const met = req.regex.test(password);
-        if (met) {
-            score++;
-            metCount++;
-            req.el.classList.add('req-met');
-            req.el.querySelector('i').classList.remove('fa-circle');
-            req.el.querySelector('i').classList.add('fa-check-circle');
-        } else {
-            req.el.classList.remove('req-met');
-            req.el.querySelector('i').classList.remove('fa-check-circle');
-            req.el.querySelector('i').classList.add('fa-circle');
-        }
-    }
-
-    // Update strength bar
-    const percentage = (score / 5) * 100;
-    strengthFill.style.width = percentage + '%';
-
-    // Update text and color
-    strengthFill.className = 'strength-fill';
-    strengthText.className = 'strength-text';
-
-    if (score <= 1) {
-        strengthFill.classList.add('strength-weak');
-        strengthText.classList.add('strength-weak');
-        strengthText.textContent = 'Weak - Add more variety';
-    } else if (score === 2) {
-        strengthFill.classList.add('strength-fair');
-        strengthText.classList.add('strength-fair');
-        strengthText.textContent = 'Fair - Could be stronger';
-    } else if (score === 3 || score === 4) {
-        strengthFill.classList.add('strength-good');
-        strengthText.classList.add('strength-good');
-        strengthText.textContent = 'Good - Nice password';
-    } else {
-        strengthFill.classList.add('strength-strong');
-        strengthText.classList.add('strength-strong');
-        strengthText.textContent = 'Strong - Excellent!';
-    }
-
-    // Enable/disable submit based on all requirements met
-    submitBtn.disabled = metCount < 5;
-    submitBtn.style.opacity = metCount < 5 ? '0.6' : '1';
-    submitBtn.style.cursor = metCount < 5 ? 'not-allowed' : 'pointer';
-}
-
-newPassword.addEventListener('input', function() {
-    checkStrength(this.value);
-});
-
-// Initial check
-checkStrength(newPassword.value);
-
-// Form validation
-document.getElementById('passwordForm').addEventListener('submit', function(e) {
-    const newPass = document.getElementById('new_password').value;
-    const confirmPass = document.getElementById('confirm_password').value;
+function validatePasswordForm(event) {
+    const newPass = document.getElementById('new_password')?.value || '';
+    const confirmPass = document.getElementById('confirm_password')?.value || '';
 
     if (newPass !== confirmPass) {
-        e.preventDefault();
+        event.preventDefault();
         Swal.fire({
             icon: 'error',
             title: 'Passwords Do Not Match',
@@ -632,17 +558,11 @@ document.getElementById('passwordForm').addEventListener('submit', function(e) {
         return false;
     }
 
-    // Check all requirements
-    let allMet = true;
-    for (let key in requirements) {
-        if (!requirements[key].regex.test(newPass)) {
-            allMet = false;
-            break;
-        }
-    }
+    const requirements = [/.{8,}/, /[A-Z]/, /[a-z]/, /[0-9]/, /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/\?]/];
+    const allMet = requirements.every(regex => regex.test(newPass));
 
     if (!allMet) {
-        e.preventDefault();
+        event.preventDefault();
         Swal.fire({
             icon: 'warning',
             title: 'Password Too Weak',
@@ -651,6 +571,12 @@ document.getElementById('passwordForm').addEventListener('submit', function(e) {
         });
         return false;
     }
+
+    return true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('passwordForm')?.addEventListener('submit', validatePasswordForm);
 });
 </script>
 
