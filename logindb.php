@@ -1,9 +1,28 @@
 <?php
-session_start();
+/**
+ * LOGIN HANDLER - FIXED VERSION
+ * Uses role-specific sessions so different roles can coexist in separate tabs.
+ * Rate-limiting data is kept in a generic 'LOGIN_PORTAL' session.
+ * After successful auth, the role-specific session is started.
+ */
+
 require_once "./config/connection.php";
 require_once "./rbac_helper.php";
 
-/* FIX 1: Session timeout configuration */
+/* ============================================
+   STEP 1: Handle rate limiting in LOGIN_PORTAL
+   ============================================ */
+
+// Start LOGIN_PORTAL for rate limiting
+ini_set('session.cookie_path', '/');
+
+// Only start if not already active to avoid conflicts
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('LOGIN_PORTAL');
+    session_start();
+}
+
+/* Session timeout configuration */
 if (!isset($_SESSION['created'])) {
     $_SESSION['created'] = time();
 } else if (time() - $_SESSION['created'] > 1800) {
@@ -11,7 +30,7 @@ if (!isset($_SESSION['created'])) {
     $_SESSION['created'] = time();
 }
 
-/* FIX 2: Rate limiting - max 5 failed attempts per 15 minutes */
+/* Rate limiting - max 5 failed attempts per 15 minutes */
 $maxAttempts = 5;
 $lockoutTime = 900; // 15 minutes
 
@@ -26,6 +45,9 @@ if (time() - $_SESSION['last_attempt_time'] > $lockoutTime) {
     $_SESSION['last_attempt_time'] = time();
 }
 
+$role = ''; // Initialize role variable
+$redirect_url = 'login.php'; // Default redirect
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Check if user is locked out
@@ -38,7 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $id_number = mysqli_real_escape_string($conn, $_POST['id']);
         $password   = $_POST['password'];
 
-        /* FIX 3: Use prepared statement to prevent SQL injection */
+        /* Use prepared statement to prevent SQL injection */
         $stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE id_number = ? LIMIT 1");
         mysqli_stmt_bind_param($stmt, "s", $id_number);
         mysqli_stmt_execute($stmt);
@@ -78,29 +100,54 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
 
+                /* ============================================
+                   FIX: Start the role-specific session properly
+                   ============================================ */
+                $role = $user['role'];
+
+                // Map role to session name
+                $session_map = [
+                    'admin'            => 'ADMIN_SESSION',
+                    'election_officer' => 'OFFICER_SESSION',
+                    'observer'         => 'OBSERVER_SESSION',
+                    'voter'            => 'VOTER_SESSION'
+                ];
+                $sess_name = $session_map[$role] ?? 'VOTER_SESSION';
+
+                // FIX: Properly close LOGIN_PORTAL session before switching
+                $_SESSION = array();
+                session_destroy();
+
+                // Start the role-specific session fresh
+                ini_set('session.cookie_path', '/');
+                session_name($sess_name);
+                session_start();
+
                 // Regenerate session ID to prevent session fixation
                 session_regenerate_id(true);
 
-                // Reset login attempts on success
-                $_SESSION['login_attempts'] = 0;
-                $_SESSION['last_attempt_time'] = time();
-                $_SESSION['created'] = time();
-
-                // Set session variables
-                $_SESSION['user_id']    = $user['id'];
-                $_SESSION['id_number']  = $user['id_number'];
-                $_SESSION['role']       = $user['role'];
+                // Set session variables in the ROLE-SPECIFIC session
+                $_SESSION['user_id']       = $user['id'];
+                $_SESSION['id_number']     = $user['id_number'];
+                $_SESSION['role']          = $user['role'];
                 $_SESSION['last_activity'] = time();
 
-                /* FIX: Check if user needs to change password (first login after officer registration) */
+                /* Check if user needs to change password (first login after officer registration) */
                 $password_changed = $user['password_changed'] ?? 1;
 
                 if ($password_changed == 0) {
                     $status = "first_login";
-                    $role   = $user['role'];
+                    // FIX: Always include role parameter for reliable session detection
+                    $redirect_url = "change_password.php?role=" . urlencode($role);
                 } else {
                     $status = "success";
-                    $role   = $user['role'];
+                    // Set redirect based on role
+                    $redirect_url = match($role) {
+                        'admin' => 'admin_dashboard.php',
+                        'election_officer' => 'election_officer_dashboard.php',
+                        'observer' => 'observer_dashboard.php',
+                        default => 'voter_dashboard.php'
+                    };
                 }
 
                 $user_id = $user['id'];
@@ -158,22 +205,10 @@ end_login:
         title: 'Login Successful',
         confirmButtonColor: '#1e40af'
     }).then(() => {
-        <?php 
-        // ROLE-BASED REDIRECT: Each role gets their own dashboard
-        if ($role === "admin"): 
-        ?>
-            window.location.href = "admin_dashboard.php";
-        <?php elseif ($role === "election_officer"): ?>
-            window.location.href = "election_officer_dashboard.php";
-        <?php elseif ($role === "observer"): ?>
-            window.location.href = "observer_dashboard.php";
-        <?php else: ?>
-            window.location.href = "voter_dashboard.php";
-        <?php endif; ?>
+        window.location.href = "<?php echo $redirect_url; ?>";
     });
 
 <?php elseif ($status === "first_login"): ?>
-    /* FIX: First login after officer registration - force password change */
     Swal.fire({
         icon: 'warning',
         title: 'Password Change Required',
@@ -182,7 +217,7 @@ end_login:
         allowOutsideClick: false,
         allowEscapeKey: false
     }).then(() => {
-        window.location.href = "change_password.php";
+        window.location.href = "<?php echo $redirect_url; ?>";
     });
 
 <?php elseif ($status === "suspended"): ?>

@@ -1,17 +1,12 @@
 <?php
+// FIX: Use voter-specific session for proper role isolation
+ini_set('session.cookie_path', '/');
+session_name('VOTER_SESSION');
 session_start();
+
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 require_once "./rbac_helper.php";
-
-/* SESSION TIMEOUT CHECK (30 minutes) */
-if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php?timeout=1");
-    exit();
-}
-$_SESSION['last_activity'] = time();
 
 /* RBAC: Only voters can access voting page */
 check_session_timeout();
@@ -109,7 +104,7 @@ if (isset($_POST['vote']) && !$hasVoted) {
                 /* FIX 3: Atomic vote insertion with UNIQUE constraint handling
                    The votes table should have: UNIQUE KEY unique_vote (user_id, position_name)
                 */
-                
+
                 // Re-check eligibility at insert time (defense in depth against race conditions)
                 $doubleCheck = mysqli_prepare($conn, "
                     SELECT COUNT(*) as count 

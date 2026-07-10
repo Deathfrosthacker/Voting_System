@@ -8,9 +8,6 @@
  * have already been loaded by the parent page.
  */
 
-// Do NOT call session_start() here — parent page already did it
-// Do NOT call require_observer() here — parent page handles auth
-
 $current_role = $_SESSION['role'] ?? '';
 $current_page = basename($_SERVER['PHP_SELF']);
 
@@ -164,7 +161,7 @@ foreach ($nav_items as $item) {
     </nav>
 
     <div class="sidebar-footer-nav">
-        <a href="change_password.php?mode=optional" class="sidebar-link" style="color: rgba(255,255,255,0.75);">
+        <a href="change_password.php?mode=optional<?php echo isset($_SESSION['role']) ? '&role=' . urlencode($_SESSION['role']) : ''; ?>" class="sidebar-link" style="color: rgba(255,255,255,0.75);">
             <i class="fas fa-key"></i>
             <span>Change Password</span>
         </a>

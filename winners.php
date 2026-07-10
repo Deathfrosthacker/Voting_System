@@ -1,5 +1,5 @@
 <?php
-session_start();
+// Session is started by check_session_timeout() in rbac_helper.php
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
 require_once "./rbac_helper.php";

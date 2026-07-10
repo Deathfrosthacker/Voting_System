@@ -1,43 +1,114 @@
 <?php
-session_start();
+/**
+ * CHANGE PASSWORD - FIXED VERSION
+ * Security fixes:
+ * 1. Session timeout and role check
+ * 2. Regenerate session ID on password change
+ * 3. Proper redirect after change
+ * 4. FIXED: Session detection now uses role hint from URL first, preventing
+ *    admin session from being picked when user is a different role
+ */
+
+ini_set('session.cookie_path', '/');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.cookie_samesite', 'Strict');
+
+// Role to session name mapping
+$session_map = [
+    'admin'            => 'ADMIN_SESSION',
+    'election_officer' => 'OFFICER_SESSION',
+    'observer'         => 'OBSERVER_SESSION',
+    'voter'            => 'VOTER_SESSION'
+];
+
+// ============================================================
+// FIX: Use role hint from URL as PRIMARY session selector.
+// When login redirects here with ?role=election_officer, we
+// MUST use OFFICER_SESSION, not whatever cookie happens to exist.
+// ============================================================
+$role_hint = $_GET['role'] ?? null;
+$session_started = false;
+
+if ($role_hint && isset($session_map[$role_hint])) {
+    // Primary: Use the role from URL parameter (set by logindb.php)
+    $target_sess = $session_map[$role_hint];
+    if (isset($_COOKIE[$target_sess])) {
+        session_name($target_sess);
+        session_start();
+        $session_started = true;
+    }
+}
+
+// Fallback: If no role hint or cookie not found, try cookie detection
+if (!$session_started) {
+    // Try each role session to find an active one
+    foreach ($session_map as $sess_role => $sess_name) {
+        if (isset($_COOKIE[$sess_name])) {
+            session_name($sess_name);
+            session_start();
+            $session_started = true;
+            break;
+        }
+    }
+}
+
+// Last resort: generic session (for backward compatibility)
+if (!$session_started && session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 require_once "./rbac_helper.php";
 
-/* If not logged in, redirect to login */
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
-    header("Location: login.php");
+/* Use centralized session security from rbac_helper.php */
+check_session_timeout();
+require_auth();
+
+// FIX: Ensure we have valid session data before proceeding
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || !isset($_SESSION['id_number'])) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php?error=invalid_session");
     exit();
 }
 
-/* Check session timeout */
-check_session_timeout();
-
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
+$id_number = $_SESSION['id_number'];
 
-/* Fetch current user data */
-$stmt = mysqli_prepare($conn, "SELECT name, id_number, password_changed FROM users WHERE id = ? LIMIT 1");
+/* ==================== FETCH USER DATA WITH VALIDATION ==================== */
+$stmt = mysqli_prepare($conn, "SELECT id, name, id_number, password_changed, role FROM users WHERE id = ? LIMIT 1");
 mysqli_stmt_bind_param($stmt, "i", $user_id);
 mysqli_stmt_execute($stmt);
 $userResult = mysqli_stmt_get_result($stmt);
 $user = mysqli_fetch_assoc($userResult);
+
+// Verify the session user matches the database user
+// FIX: Use loose type comparison to handle string/int differences from DB
+if (!$user || (int)$user['id'] !== (int)$user_id || $user['role'] !== $role || $user['id_number'] !== $id_number) {
+    // Session data doesn't match database - possible tampering or corruption
+    session_unset();
+    session_destroy();
+    header("Location: login.php?error=session_corrupted");
+    exit();
+}
+
+/* Pre-define redirect URL for cancel button and success redirect */
+$redirect_url = match($role) {
+    'admin' => 'admin_dashboard.php',
+    'election_officer' => 'election_officer_dashboard.php',
+    'observer' => 'observer_dashboard.php',
+    default => 'voter_dashboard.php'
+};
 
 /* Check if this is optional password change or forced */
 $is_optional = isset($_GET['mode']) && $_GET['mode'] === 'optional';
 
 /* If password already changed and this is NOT optional mode, redirect to dashboard */
 if ($user['password_changed'] == 1 && !$is_optional) {
-    // Redirect based on role
-    if ($role === 'admin') {
-        header("Location: admin_dashboard.php");
-    } elseif ($role === 'election_officer') {
-        header("Location: election_officer_dashboard.php");
-    } elseif ($role === 'observer') {
-        header("Location: observer_dashboard.php");
-    } else {
-        header("Location: voter_dashboard.php");
-    }
+    header("Location: " . $redirect_url);
     exit();
 }
 
@@ -49,6 +120,9 @@ if (isset($_POST['change_password'])) {
         $current_password = $_POST['current_password'];
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'];
+
+        // Re-validate session before sensitive operation
+        check_session_timeout();
 
         // Validate current password
         $checkStmt = mysqli_prepare($conn, "SELECT password FROM users WHERE id = ? LIMIT 1");
@@ -76,8 +150,11 @@ if (isset($_POST['change_password'])) {
             mysqli_stmt_bind_param($updStmt, "si", $hashedPassword, $user_id);
 
             if (mysqli_stmt_execute($updStmt)) {
+                // Regenerate session ID to prevent fixation
+                session_regenerate_id(true);
+
                 // Log activity
-                $activity = "Changed password on first login";
+                $activity = "Changed password";
                 $logStmt = mysqli_prepare($conn, 
                     "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())"
                 );
@@ -88,14 +165,6 @@ if (isset($_POST['change_password'])) {
 
                 // Set a session flag to show success on redirect
                 $_SESSION['password_changed_success'] = true;
-
-                // Redirect after short delay (handled by JS)
-                $redirect_url = match($role) {
-                    'admin' => 'admin_dashboard.php',
-                    'election_officer' => 'election_officer_dashboard.php',
-                    'observer' => 'observer_dashboard.php',
-                    default => 'voter_dashboard.php'
-                };
             } else {
                 $error_message = "Could not update password. Please try again.";
             }
@@ -191,6 +260,16 @@ if (isset($_POST['change_password'])) {
         }
         .user-details p {
             font-size: 13px; color: #64748b;
+        }
+        .session-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
         }
         .form-group {
             margin-bottom: 20px;
@@ -362,6 +441,9 @@ if (isset($_POST['change_password'])) {
         <div class="user-details">
             <h4><?php echo htmlspecialchars($user['name']); ?></h4>
             <p>ID: <?php echo htmlspecialchars($user['id_number']); ?></p>
+            <span class="session-badge" style="background: <?php echo get_role_bg_color($role); ?>; color: <?php echo get_role_color($role); ?>">
+                <i class="fas fa-shield-alt"></i> <?php echo get_role_display_name($role); ?>
+            </span>
         </div>
     </div>
 
@@ -437,7 +519,7 @@ if (isset($_POST['change_password'])) {
                 <i class="fas fa-shield-alt"></i> Update Password
             </button>
             <?php if ($is_optional): ?>
-            <a href="<?php echo $redirect_url; ?>" style="padding: 14px 24px; background: #f1f5f9; color: #475569; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px; text-align: center;">
+            <a href="<?php echo htmlspecialchars($redirect_url); ?>" style="padding: 14px 24px; background: #f1f5f9; color: #475569; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px; text-align: center;">
                 Cancel
             </a>
             <?php endif; ?>
@@ -472,7 +554,7 @@ const requirements = {
     upper: { regex: /[A-Z]/, el: document.getElementById('req-upper') },
     lower: { regex: /[a-z]/, el: document.getElementById('req-lower') },
     number: { regex: /[0-9]/, el: document.getElementById('req-number') },
-    special: { regex: /[!@#$%^&*()_+\-=\[\]{};':"\|,.<>\/?]/, el: document.getElementById('req-special') }
+    special: { regex: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/?]/, el: document.getElementById('req-special') }
 };
 
 function checkStrength(password) {

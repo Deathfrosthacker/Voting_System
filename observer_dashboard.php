@@ -1,5 +1,9 @@
 <?php
+// MUST be first - set the correct session name before rbac_helper starts it
+ini_set('session.cookie_path', '/');
+session_name('OBSERVER_SESSION');
 session_start();
+
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
 require_once "./rbac_helper.php";

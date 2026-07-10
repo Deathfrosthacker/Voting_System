@@ -1,6 +1,21 @@
 <?php
-session_start();
+// FIX: Don't call session_start here - rbac_helper.php handles it
 require_once "./rbac_helper.php";
+
+// Ensure session is active with proper cookie path
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_path', '/');
+    session_start();
+}
+
+// Determine correct dashboard URL based on role
+$role = $_SESSION['role'] ?? '';
+$dashboard_url = match($role) {
+    'admin' => 'admin_dashboard.php',
+    'election_officer' => 'election_officer_dashboard.php',
+    'observer' => 'observer_dashboard.php',
+    default => 'voter_dashboard.php'
+};
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -148,13 +163,6 @@ require_once "./rbac_helper.php";
         if (isset($_SESSION['role'])): 
             $role = $_SESSION['role'];
             $permissions = get_role_permissions($role);
-            // Determine correct dashboard URL
-            $dashboard_url = match($role) {
-                'admin' => 'admin_dashboard.php',
-                'election_officer' => 'election_officer_dashboard.php',
-                'observer' => 'observer_dashboard.php',
-                default => 'voter_dashboard.php'
-            };
         ?>
         <div class="role-info">
             <h3>Your Current Role</h3>
@@ -181,7 +189,7 @@ require_once "./rbac_helper.php";
         <?php endif; ?>
 
         <div>
-            <a href="<?php echo isset($dashboard_url) ? $dashboard_url : 'login.php'; ?>" class="btn btn-primary">
+            <a href="<?php echo htmlspecialchars($dashboard_url); ?>" class="btn btn-primary">
                 <i class="fas fa-home"></i> Go to Dashboard
             </a>
             <a href="logout.php" class="btn btn-secondary">

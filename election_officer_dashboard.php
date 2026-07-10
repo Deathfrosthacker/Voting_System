@@ -1,5 +1,8 @@
 <?php
+ini_set('session.cookie_path', '/');
+session_name('OFFICER_SESSION');
 session_start();
+
 require_once "./config/connection.php";
 require_once "./auto_declare.php";
 require_once "./rbac_helper.php";

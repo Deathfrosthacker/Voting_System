@@ -13,17 +13,135 @@
 require_once __DIR__ . "/config/connection.php";
 
 /**
- * Check if current user has a specific permission
+ * Start session respecting any previously set session_name()
+ * This allows role-specific sessions to work correctly across tabs.
  * 
- * @param string $permission_code The permission code to check
- * @return bool True if user has permission, false otherwise
+ * CRITICAL FIX: When multiple role sessions exist in cookies, we need to
+ * check which one is being requested by the current page context.
+ * Now supports $_GET['role'] as a hint for multi-session scenarios.
+ */
+function start_role_session(): void {
+    // If session already active, don't restart
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    // If a session name was already explicitly set by calling code, respect it
+    if (session_name() !== 'PHPSESSID') {
+        if (session_status() === PHP_SESSION_NONE) {
+            ini_set('session.cookie_path', '/');
+            session_start();
+        }
+        return;
+    }
+
+    // Role session mapping
+    $role_sessions = [
+        'ADMIN_SESSION'    => 'admin',
+        'OFFICER_SESSION'  => 'election_officer',
+        'OBSERVER_SESSION' => 'observer',
+        'VOTER_SESSION'    => 'voter'
+    ];
+
+    // ============================================================
+    // FIX: Check for role hint from URL first (e.g., ?role=election_officer)
+    // This prevents the wrong session from being selected when
+    // multiple role cookies exist in the browser.
+    // ============================================================
+    $role_hint = $_GET['role'] ?? null;
+    if ($role_hint && in_array($role_hint, $role_sessions)) {
+        $target_sess = array_search($role_hint, $role_sessions);
+        if ($target_sess !== false && isset($_COOKIE[$target_sess])) {
+            ini_set('session.cookie_path', '/');
+            session_name($target_sess);
+            session_start();
+            return;
+        }
+    }
+
+    // Auto-detect from cookies - but ONLY if there's exactly one role session
+    // If multiple exist, we need the calling code to tell us which one to use
+    $found_sessions = [];
+    foreach ($role_sessions as $sess_name => $sess_role) {
+        if (isset($_COOKIE[$sess_name])) {
+            $found_sessions[$sess_name] = $sess_role;
+        }
+    }
+
+    // If no role session found, start generic session (for login page, etc.)
+    if (empty($found_sessions)) {
+        ini_set('session.cookie_path', '/');
+        session_start();
+        return;
+    }
+
+    // If exactly one found, use it
+    if (count($found_sessions) === 1) {
+        $sess_name = array_key_first($found_sessions);
+        ini_set('session.cookie_path', '/');
+        session_name($sess_name);
+        session_start();
+        return;
+    }
+
+    // Multiple sessions found - this is the multi-tab scenario
+    // We need to determine which one this page wants based on allowed roles
+    // The calling code (require_auth) should have set this, but as fallback:
+    // Check if current script name hints at the role
+    $script = basename($_SERVER['PHP_SELF']);
+
+    $role_hints = [
+        'admin' => [
+            'admin_dashboard', 'adminadd', 'manage_officials',
+            'winners', 'activity_logs', 'votes', 'positions',
+            'add_candidate', 'regions', 'affiliations', 'register_voter',
+            'diagnostic', 'edit_position', 'delete_position', 'change_password'
+        ],
+        'election_officer' => [
+            'election_officer_dashboard',
+            'winners', 'activity_logs', 'votes', 'positions',
+            'add_candidate', 'regions', 'affiliations', 'register_voter',
+            'edit_position', 'delete_position', 'change_password'
+        ],
+        'observer' => [
+            'observer_dashboard',
+            'winners', 'activity_logs', 'votes', 'diagnostic', 'change_password'
+        ],
+        'voter' => [
+            'voter_dashboard', 'vote.php', 'vote', 'change_password'
+        ]
+    ];
+
+    foreach ($role_hints as $hint_role => $hint_scripts) {
+        foreach ($hint_scripts as $hint) {
+            if (strpos($script, $hint) !== false) {
+                // Found a hint, use the corresponding session
+                $target_sess = array_search($hint_role, $role_sessions);
+                if ($target_sess !== false && isset($found_sessions[$target_sess])) {
+                    ini_set('session.cookie_path', '/');
+                    session_name($target_sess);
+                    session_start();
+                    return;
+                }
+            }
+        }
+    }
+
+    // Fallback: use the first one found (usually the most recently created)
+    // This maintains backward compatibility
+    $first_sess = array_key_first($found_sessions);
+    ini_set('session.cookie_path', '/');
+    session_name($first_sess);
+    session_start();
+}
+
+/**
+ * Check if current user has a specific permission
  */
 function has_permission(string $permission_code): bool {
     global $conn;
 
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
 
     // Must be logged in
     if (!isset($_SESSION['role'])) {
@@ -48,12 +166,6 @@ function has_permission(string $permission_code): bool {
     return mysqli_num_rows($result) > 0;
 }
 
-/**
- * Check if user has ANY of the given permissions
- * 
- * @param array $permission_codes Array of permission codes
- * @return bool True if user has at least one permission
- */
 function has_any_permission(array $permission_codes): bool {
     foreach ($permission_codes as $code) {
         if (has_permission($code)) {
@@ -63,12 +175,6 @@ function has_any_permission(array $permission_codes): bool {
     return false;
 }
 
-/**
- * Check if user has ALL of the given permissions
- * 
- * @param array $permission_codes Array of permission codes
- * @return bool True if user has all permissions
- */
 function has_all_permissions(array $permission_codes): bool {
     foreach ($permission_codes as $code) {
         if (!has_permission($code)) {
@@ -78,12 +184,6 @@ function has_all_permissions(array $permission_codes): bool {
     return true;
 }
 
-/**
- * Require a specific permission or redirect to unauthorized page
- * 
- * @param string $permission_code The required permission
- * @param string $redirect_url Where to redirect if unauthorized (default: login.php)
- */
 function require_permission(string $permission_code, string $redirect_url = "login.php"): void {
     if (!has_permission($permission_code)) {
         header("Location: $redirect_url");
@@ -91,12 +191,6 @@ function require_permission(string $permission_code, string $redirect_url = "log
     }
 }
 
-/**
- * Require any of the given permissions
- * 
- * @param array $permission_codes Array of acceptable permissions
- * @param string $redirect_url Where to redirect if unauthorized
- */
 function require_any_permission(array $permission_codes, string $redirect_url = "login.php"): void {
     if (!has_any_permission($permission_codes)) {
         header("Location: $redirect_url");
@@ -104,12 +198,6 @@ function require_any_permission(array $permission_codes, string $redirect_url = 
     }
 }
 
-/**
- * Get all permissions for a role
- * 
- * @param string $role The role to get permissions for
- * @return array Array of permission codes
- */
 function get_role_permissions(string $role): array {
     global $conn;
 
@@ -128,12 +216,6 @@ function get_role_permissions(string $role): array {
     return $permissions;
 }
 
-/**
- * Get human-readable role name
- * 
- * @param string $role The role key
- * @return string Human-readable role name
- */
 function get_role_display_name(string $role): string {
     $names = [
         'admin' => 'System Administrator',
@@ -144,106 +226,53 @@ function get_role_display_name(string $role): string {
     return $names[$role] ?? ucfirst(str_replace('_', ' ', $role));
 }
 
-/**
- * Get role badge color for UI
- * 
- * @param string $role The role
- * @return string CSS color code
- */
 function get_role_color(string $role): string {
     $colors = [
-        'admin' => '#dc2626',           // Red
-        'election_officer' => '#2563eb', // Blue
-        'observer' => '#059669',         // Green
-        'voter' => '#6b7280'           // Gray
+        'admin' => '#dc2626',
+        'election_officer' => '#2563eb',
+        'observer' => '#059669',
+        'voter' => '#6b7280'
     ];
     return $colors[$role] ?? '#6b7280';
 }
 
-/**
- * Get role badge background color for UI
- * 
- * @param string $role The role
- * @return string CSS background color
- */
 function get_role_bg_color(string $role): string {
     $colors = [
-        'admin' => '#fee2e2',           // Light red
-        'election_officer' => '#dbeafe', // Light blue
-        'observer' => '#d1fae5',         // Light green
-        'voter' => '#f3f4f6'             // Light gray
+        'admin' => '#fee2e2',
+        'election_officer' => '#dbeafe',
+        'observer' => '#d1fae5',
+        'voter' => '#f3f4f6'
     ];
     return $colors[$role] ?? '#f3f4f6';
 }
 
-/**
- * Check if user is an official (admin, election_officer, or observer)
- * 
- * @return bool True if user is an official
- */
 function is_official(): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     return isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'election_officer', 'observer']);
 }
 
-/**
- * Check if user is admin
- * 
- * @return bool True if admin
- */
 function is_admin(): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 }
 
-/**
- * Check if user is election officer
- * 
- * @return bool True if election officer
- */
 function is_election_officer(): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     return isset($_SESSION['role']) && $_SESSION['role'] === 'election_officer';
 }
 
-/**
- * Check if user is observer
- * 
- * @return bool True if observer
- */
 function is_observer(): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     return isset($_SESSION['role']) && $_SESSION['role'] === 'observer';
 }
 
-/**
- * Check if user is voter
- * 
- * @return bool True if voter
- */
 function is_voter(): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     return isset($_SESSION['role']) && $_SESSION['role'] === 'voter';
 }
 
-/**
- * Require observer role (for pages that both admin and observer can access)
- * Redirects to login if not an official
- */
 function require_observer(): void {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
     if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'election_officer', 'observer'])) {
         header("Location: login.php");
         exit();
@@ -252,16 +281,21 @@ function require_observer(): void {
 
 /**
  * Universal session timeout check (30 minutes)
- * Call this at the top of every protected page
- * 
- * @param string $redirect_url Where to redirect on timeout
  */
 function check_session_timeout(string $redirect_url = "login.php?timeout=1"): void {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
 
+    // Check session timeout
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+        // Destroy session
+        $_SESSION = array();
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000,
+                $params["path"], $params["domain"],
+                $params["secure"], $params["httponly"]
+            );
+        }
         session_unset();
         session_destroy();
         header("Location: $redirect_url");
@@ -274,14 +308,9 @@ function check_session_timeout(string $redirect_url = "login.php?timeout=1"): vo
 /**
  * Universal authentication check
  * Ensures user is logged in with a valid role
- * 
- * @param array $allowed_roles Array of allowed roles (empty = any role)
- * @param string $redirect_url Where to redirect if not authenticated
  */
 function require_auth(array $allowed_roles = [], string $redirect_url = "login.php"): void {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    start_role_session();
 
     // Check if logged in
     if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
@@ -290,7 +319,22 @@ function require_auth(array $allowed_roles = [], string $redirect_url = "login.p
     }
 
     // Check session timeout
-    check_session_timeout();
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+        $_SESSION = array();
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000,
+                $params["path"], $params["domain"],
+                $params["secure"], $params["httponly"]
+            );
+        }
+        session_unset();
+        session_destroy();
+        header("Location: login.php?timeout=1");
+        exit();
+    }
+
+    $_SESSION['last_activity'] = time();
 
     // Check role restriction
     if (!empty($allowed_roles) && !in_array($_SESSION['role'], $allowed_roles)) {
@@ -299,12 +343,6 @@ function require_auth(array $allowed_roles = [], string $redirect_url = "login.p
     }
 }
 
-/**
- * Log an activity to the database
- * 
- * @param int $user_id The user performing the action
- * @param string $activity Description of the activity
- */
 function log_activity(int $user_id, string $activity): void {
     global $conn;
 
@@ -318,12 +356,6 @@ function log_activity(int $user_id, string $activity): void {
     }
 }
 
-/**
- * Get role badge HTML for display in tables/lists
- * 
- * @param string $role The role
- * @return string HTML span element
- */
 function get_role_badge(string $role): string {
     $bg = get_role_bg_color($role);
     $color = get_role_color($role);
