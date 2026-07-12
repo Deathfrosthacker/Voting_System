@@ -15,8 +15,8 @@ if (isset($_POST['add_region'])) {
         exit();
     }
 
-    $name = mysqli_real_escape_string($conn, $_POST['region_name']);
-    $description = mysqli_real_escape_string($conn, $_POST['description'] ?? '');
+    $name = trim($_POST['region_name'] ?? '');
+    $description = trim($_POST['description'] ?? '');
 
     /* FIX: Use prepared statement to prevent SQL injection */
     $check = mysqli_prepare($conn, "SELECT id FROM regions WHERE name = ?");

@@ -2,13 +2,13 @@
 require_once "./config/connection.php";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id']);
-    $name  = mysqli_real_escape_string($conn, $_POST['name']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $date_of_birth = $_POST['date_of_birth'];
+    $id_number  = trim($_POST['id'] ?? '');
+    $name  = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $date_of_birth = $_POST['date_of_birth'] ?? '';
     /* FIX: Use region_id from the form instead of county (which doesn't exist in form) */
     $region_id = !empty($_POST['region_id']) ? (int)$_POST['region_id'] : null;
-    $password = $_POST['password'];
+    $password = $_POST['password'] ?? '';
     $confirm_password = $_POST['confirm_password'];
 
     // Default role

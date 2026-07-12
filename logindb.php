@@ -57,8 +57,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $lockout_remaining = $remaining;
     } else {
 
-        $id_number = mysqli_real_escape_string($conn, $_POST['id']);
-        $password   = $_POST['password'];
+        $id_number = trim($_POST['id'] ?? '');
+        $password   = $_POST['password'] ?? '';
 
         /* Use prepared statement to prevent SQL injection */
         $stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE id_number = ? LIMIT 1");
@@ -67,8 +67,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $result = mysqli_stmt_get_result($stmt);
 
         if ($result === false) {
+            error_log("Login DB error: " . mysqli_error($conn));
             $status = "db_error";
-            $error_detail = mysqli_error($conn);
+            $error_detail = "A database error occurred. Please try again later.";
 
             $_SESSION['login_attempts']++;
             $_SESSION['last_attempt_time'] = time();

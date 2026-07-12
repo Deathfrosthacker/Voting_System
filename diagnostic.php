@@ -38,7 +38,8 @@ if ($votesStructure) {
     }
     echo "</table>";
 } else {
-    echo "<p class='error'>Error: " . mysqli_error($conn) . "</p>";
+    error_log("Diagnostic query failed: " . mysqli_error($conn));
+    echo "<p class='error'>A technical error occurred while retrieving diagnostic data.</p>";
 }
 echo "</div>";
 
@@ -60,7 +61,8 @@ if ($indexes) {
     }
     echo "</table>";
 } else {
-    echo "<p class='error'>Error: " . mysqli_error($conn) . "</p>";
+    error_log("Diagnostic query failed: " . mysqli_error($conn));
+    echo "<p class='error'>A technical error occurred while retrieving diagnostic data.</p>";
 }
 echo "</div>";
 
@@ -83,7 +85,8 @@ if ($candidatesStructure) {
     }
     echo "</table>";
 } else {
-    echo "<p class='error'>Error: " . mysqli_error($conn) . "</p>";
+    error_log("Diagnostic query failed: " . mysqli_error($conn));
+    echo "<p class='error'>A technical error occurred while retrieving diagnostic data.</p>";
 }
 echo "</div>";
 

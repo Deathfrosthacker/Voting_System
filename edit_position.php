@@ -49,10 +49,10 @@ if (isset($_POST['update_position'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_message = "Invalid CSRF token. Please try again.";
     } else {
-        $name = mysqli_real_escape_string($conn, $_POST['position_name']);
-        $description = mysqli_real_escape_string($conn, $_POST['description']);
-        $start = $_POST['start_date'];
-        $end = $_POST['end_date'];
+        $name = trim($_POST['position_name'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        $start = $_POST['start_date'] ?? '';
+        $end = $_POST['end_date'] ?? '';
 
         /*NEW: Handle scope and region changes */
         $scope = $_POST['scope'] ?? 'global';

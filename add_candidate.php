@@ -52,10 +52,10 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    $candidate_name = mysqli_real_escape_string($conn, $_POST['candidate_name']);
-    $position       = $_POST['position_name'];
-    $start_date = $_POST['start_date'];
-    $end_date   = $_POST['end_date'];
+    $candidate_name = trim($_POST['candidate_name'] ?? '');
+    $position       = trim($_POST['position_name'] ?? '');
+    $start_date = $_POST['start_date'] ?? '';
+    $end_date   = $_POST['end_date'] ?? '';
 
     $today = date('Y-m-d');
 

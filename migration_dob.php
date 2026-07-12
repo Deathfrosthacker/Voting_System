@@ -2,12 +2,12 @@
 require_once "./config/connection.php";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $id_number  = mysqli_real_escape_string($conn, $_POST['id']);
-    $name  = mysqli_real_escape_string($conn, $_POST['name']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $date_of_birth = $_POST['date_of_birth'];
-    $county = mysqli_real_escape_string($conn, $_POST['county'] ?? '');
-    $password = $_POST['password'];
+    $id_number  = trim($_POST['id'] ?? '');
+    $name  = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $date_of_birth = $_POST['date_of_birth'] ?? '';
+    $county = trim($_POST['county'] ?? '');
+    $password = $_POST['password'] ?? '';
     $confirm_password = $_POST['confirm_password'];
 
     // Default role

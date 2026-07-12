@@ -84,15 +84,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_affiliation'])
     $aff_id = (int) $_POST['affiliation_id'];
 
     // Check if affiliation has candidates
-    $checkCandidates = mysqli_query($conn, "SELECT COUNT(*) as total FROM candidates WHERE affiliation_id = '$aff_id'");
-    $candidateCount = mysqli_fetch_assoc($checkCandidates)['total'];
+    $checkCandidates = mysqli_prepare($conn, "SELECT COUNT(*) as total FROM candidates WHERE affiliation_id = ?");
+    mysqli_stmt_bind_param($checkCandidates, "i", $aff_id);
+    mysqli_stmt_execute($checkCandidates);
+    $checkCandidatesResult = mysqli_stmt_get_result($checkCandidates);
+    $candidateCount = mysqli_fetch_assoc($checkCandidatesResult)['total'];
 
     if ($candidateCount > 0) {
         header("Location: affiliations.php?status=in_use");
         exit();
     }
 
-    $affName = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name FROM affiliations WHERE id = '$aff_id'"))['name'];
+    $nameStmt = mysqli_prepare($conn, "SELECT name FROM affiliations WHERE id = ?");
+    mysqli_stmt_bind_param($nameStmt, "i", $aff_id);
+    mysqli_stmt_execute($nameStmt);
+    $nameResult = mysqli_stmt_get_result($nameStmt);
+    $affName = mysqli_fetch_assoc($nameResult)['name'] ?? '';
 
     $deleteStmt = mysqli_prepare(
     $conn,

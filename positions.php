@@ -26,10 +26,10 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    $name  = mysqli_real_escape_string($conn, $_POST['position_name']);
-    $description  = mysqli_real_escape_string($conn, $_POST['description']);
-    $start = $_POST['start_date'];
-    $end   = $_POST['end_date'];
+    $name  = trim($_POST['position_name'] ?? '');
+    $description  = trim($_POST['description'] ?? '');
+    $start = $_POST['start_date'] ?? '';
+    $end   = $_POST['end_date'] ?? '';
 
     // NEW: Region scope
     $scope = $_POST['scope'] ?? 'global';

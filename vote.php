@@ -20,17 +20,25 @@ if (!isset($_GET['position'])) {
     die("Invalid position");
 }
 
-// Escape position for use in legacy queries (prepared statements used for critical ops)
-$position = mysqli_real_escape_string($conn, $_GET['position']);
+$position = trim($_GET['position'] ?? '');
 
 /*FETCH POSITION DETAILS */
-$posQuery = mysqli_query($conn, "
+$posQuery = mysqli_prepare($conn, "
     SELECT p.*, r.name as region_name
     FROM positions p
     LEFT JOIN regions r ON p.region_id = r.id
-    WHERE p.position_name = '$position'
+    WHERE p.position_name = ?
     LIMIT 1
 ");
+mysqli_stmt_bind_param($posQuery, "s", $position);
+mysqli_stmt_execute($posQuery);
+$posResult = mysqli_stmt_get_result($posQuery);
+
+if ($posResult === false || mysqli_num_rows($posResult) === 0) {
+    die("Position not found");
+}
+
+$pos = mysqli_fetch_assoc($posResult);
 
 if ($posQuery === false || mysqli_num_rows($posQuery) === 0) {
     die("Position not found");
