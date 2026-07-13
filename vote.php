@@ -40,12 +40,6 @@ if ($posResult === false || mysqli_num_rows($posResult) === 0) {
 
 $pos = mysqli_fetch_assoc($posResult);
 
-if ($posQuery === false || mysqli_num_rows($posQuery) === 0) {
-    die("Position not found");
-}
-
-$pos = mysqli_fetch_assoc($posQuery);
-
 /* FIX 1: Check if election is currently active (within date range) */
 $today = date('Y-m-d');
 if ($today < $pos['start_date'] || $today > $pos['end_date']) {
