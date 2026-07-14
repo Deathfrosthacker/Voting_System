@@ -543,6 +543,65 @@ function toggleVisibility(fieldId, btn) {
     }
 }
 
+function updatePasswordStrength() {
+    const password = document.getElementById('new_password')?.value || '';
+    const fill = document.getElementById('strengthFill');
+    const text = document.getElementById('strengthText');
+
+    const requirements = [
+        { id: 'req-length', regex: /.{8,}/ },
+        { id: 'req-upper', regex: /[A-Z]/ },
+        { id: 'req-lower', regex: /[a-z]/ },
+        { id: 'req-number', regex: /[0-9]/ },
+        { id: 'req-special', regex: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/\?]/ }
+    ];
+
+    let metCount = 0;
+
+    requirements.forEach(({ id, regex }) => {
+        const item = document.getElementById(id);
+        const icon = item?.querySelector('i');
+        const met = regex.test(password);
+
+        if (item) {
+            item.classList.toggle('req-met', met);
+        }
+
+        if (icon) {
+            icon.className = met ? 'fas fa-check' : 'fas fa-circle';
+        }
+
+        if (met) metCount++;
+    });
+
+    if (!password) {
+        fill.style.width = '0%';
+        fill.className = 'strength-fill';
+        text.textContent = '';
+        text.className = 'strength-text';
+        return;
+    }
+
+    let strengthClass = 'strength-weak';
+    let strengthLabel = 'Weak';
+
+    if (metCount >= 5) {
+        strengthClass = 'strength-strong';
+        strengthLabel = 'Strong';
+    } else if (metCount === 4) {
+        strengthClass = 'strength-good';
+        strengthLabel = 'Good';
+    } else if (metCount === 3) {
+        strengthClass = 'strength-fair';
+        strengthLabel = 'Fair';
+    }
+
+    fill.style.width = `${Math.max(20, metCount * 20)}%`;
+    fill.className = `strength-fill ${strengthClass}`;
+    text.textContent = `${strengthLabel} password`;
+    text.className = `strength-text ${strengthClass}`;
+}
+
 function validatePasswordForm(event) {
     const newPass = document.getElementById('new_password')?.value || '';
     const confirmPass = document.getElementById('confirm_password')?.value || '';
@@ -576,6 +635,12 @@ function validatePasswordForm(event) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const passwordField = document.getElementById('new_password');
+    if (passwordField) {
+        passwordField.addEventListener('input', updatePasswordStrength);
+        updatePasswordStrength();
+    }
+
     document.getElementById('passwordForm')?.addEventListener('submit', validatePasswordForm);
 });
 </script>
