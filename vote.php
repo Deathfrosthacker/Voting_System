@@ -1,5 +1,5 @@
 <?php
-// FIX: Use voter-specific session for proper role isolation
+// Use voter-specific session for proper role isolation
 ini_set('session.cookie_path', '/');
 session_name('VOTER_SESSION');
 session_start();
@@ -40,7 +40,7 @@ if ($posResult === false || mysqli_num_rows($posResult) === 0) {
 
 $pos = mysqli_fetch_assoc($posResult);
 
-/* FIX 1: Check if election is currently active (within date range) */
+/* Check if election is currently active (within date range) */
 $today = date('Y-m-d');
 if ($today < $pos['start_date'] || $today > $pos['end_date']) {
     die("This election is not active at this time. Voting is only allowed between " . 
@@ -48,7 +48,7 @@ if ($today < $pos['start_date'] || $today > $pos['end_date']) {
         date('M d, Y', strtotime($pos['end_date'])) . ".");
 }
 
-/* FIX 2: Validate voter's region eligibility for regional elections */
+/* Validate voter's region eligibility for regional elections */
 if ($pos['region_id'] !== null) {
     // Fetch voter's region
     $voterQuery = mysqli_prepare($conn, "SELECT region_id FROM users WHERE id = ? LIMIT 1");
@@ -103,10 +103,7 @@ if (isset($_POST['vote']) && !$hasVoted) {
                 $status = "error";
                 $error_msg = "Candidate does not belong to this position.";
             } else {
-                /* FIX 3: Atomic vote insertion with UNIQUE constraint handling
-                   The votes table should have: UNIQUE KEY unique_vote (user_id, position_name)
-                */
-
+               
                 // Re-check eligibility at insert time (defense in depth against race conditions)
                 $doubleCheck = mysqli_prepare($conn, "
                     SELECT COUNT(*) as count 
@@ -161,7 +158,7 @@ if (isset($_POST['vote']) && !$hasVoted) {
     }
 }
 
-/* FIX 4: Use prepared statement for fetching candidates */
+/* fetching candidates */
 $candStmt = mysqli_prepare($conn, "
     SELECT c.id, c.name, c.is_independent, 
            a.name as affiliation_name, a.color_code

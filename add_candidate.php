@@ -47,8 +47,7 @@ if ($affiliations === false) {
 if (isset($_POST['add_candidate'])) {
     //ADDED: CSRF validation
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-        /* FIX: Use GET-based redirect for CSRF errors so popup will show */
-        header("Location: add_candidate.php?status=csrf_error");
+       header("Location: add_candidate.php?status=csrf_error");
         exit();
     }
 
@@ -102,7 +101,6 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    /* FIX 1: Validate that the position actually exists using prepared statement */
     $checkPos = mysqli_prepare($conn, "SELECT id FROM positions WHERE position_name = ? LIMIT 1");
     mysqli_stmt_bind_param($checkPos, "s", $position);
     mysqli_stmt_execute($checkPos);
@@ -113,11 +111,11 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    // FIX 2: Check for similar candidate names using prepared statement (case-insensitive, fuzzy matching)
+    //Check for similar candidate names
     $normalized_input = strtolower(trim($candidate_name));
     $normalized_input = preg_replace('/[^a-z0-9]/', '', $normalized_input);
 
-    /* FIX: Use prepared statement to fetch existing candidates for this position */
+    /*fetch existing candidates for this position */
     $checkStmt = mysqli_prepare($conn, "SELECT name FROM candidates WHERE position = ?");
     mysqli_stmt_bind_param($checkStmt, "s", $position);
     mysqli_stmt_execute($checkStmt);
@@ -131,14 +129,14 @@ if (isset($_POST['add_candidate'])) {
             $existing_normalized = strtolower(trim($existing['name']));
             $existing_normalized = preg_replace('/[^a-z0-9]/', '', $existing_normalized);
 
-            // Check if names are identical (exact match)
+            // Check if names are identical 
             if ($normalized_input === $existing_normalized) {
                 $similar_found = true;
                 $similar_name = $existing['name'];
                 break;
             }
 
-            // Check similarity with INCREASED threshold (90% instead of 80%)
+            // Check similarity with INCREASED percentage
             similar_text($normalized_input, $existing_normalized, $percent);
             if ($percent >= 90) {
                 $similar_found = true;
@@ -153,7 +151,7 @@ if (isset($_POST['add_candidate'])) {
         exit();
     }
 
-    /* FIX 3: Use prepared statement for INSERT */
+    /* INSERT CANDIDATES */
     $stmt = mysqli_prepare(
         $conn,
         "INSERT INTO candidates
@@ -219,7 +217,7 @@ if (isset($_POST['add_candidate'])) {
     }
 
     mysqli_stmt_close($stmt);
-    /* FIX: Redirect with success status so popup shows via $_GET */
+   
     header("Location: add_candidate.php?status=success");
     exit();
 }
@@ -313,7 +311,7 @@ if (isset($_POST['add_candidate'])) {
         <div class="form-box" id="candidateForm">
             <h3 id="formTitle">Add Candidate</h3>
             <form method="POST">
-                <!-- ADDED: CSRF token field -->
+                
                 <?php echo csrf_input_field(); ?>
 
                 <input type="hidden" name="position_name" id="position_name">
@@ -331,7 +329,7 @@ if (isset($_POST['add_candidate'])) {
                     <label for="is_independent">Independent Candidate (no affiliation)</label>
                 </div>
 
-                <!-- NEW: Affiliation Dropdown (IEBC Political Party equivalent) -->
+                <!-- NEW: Affiliation Dropdown -->
                 <div class="form-group affiliation-select" id="affiliationGroup">
                     <label for="affiliation_id">Affiliation / Group / Party</label>
                     <select name="affiliation_id" id="affiliation_id">
@@ -452,8 +450,7 @@ function toggleAffiliation() {
         confirmButtonColor: '#ef4444'
     });
 <?php elseif ($_GET['status'] === "invalid_name"): ?>
-    /* FIX: Added missing handler for invalid_name */
-    Swal.fire({
+        Swal.fire({
         icon: 'warning',
         title: 'Invalid Candidate Name!',
         text: 'Name must be 3-100 characters and contain only letters, spaces, and basic punctuation.',
@@ -462,8 +459,7 @@ function toggleAffiliation() {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
 <?php elseif ($_GET['status'] === "invalid_date"): ?>
-    /* FIX: Added missing handler for invalid_date */
-    Swal.fire({
+        Swal.fire({
         icon: 'warning',
         title: 'Invalid Date!',
         text: 'Please enter valid start and end dates.',
@@ -472,8 +468,7 @@ function toggleAffiliation() {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
 <?php elseif ($_GET['status'] === "start_date_past"): ?>
-    /* FIX: Added missing handler for start_date_past */
-    Swal.fire({
+        Swal.fire({
         icon: 'warning',
         title: 'Invalid Start Date!',
         text: 'Start date cannot be in the past.',
@@ -482,8 +477,7 @@ function toggleAffiliation() {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
 <?php elseif ($_GET['status'] === "invalid_date_range"): ?>
-    /* FIX: Added missing handler for invalid_date_range */
-    Swal.fire({
+        Swal.fire({
         icon: 'warning',
         title: 'Invalid Date Range!',
         text: 'End date must be after the start date.',
@@ -492,8 +486,7 @@ function toggleAffiliation() {
         window.history.replaceState({}, document.title, 'add_candidate.php');
     });
 <?php elseif ($_GET['status'] === "duplicate_candidate"): ?>
-    /* FIX: Added missing handler for duplicate_candidate */
-    Swal.fire({
+        Swal.fire({
         icon: 'warning',
         title: 'Duplicate Candidate!',
         text: 'This candidate already exists for the selected position.',

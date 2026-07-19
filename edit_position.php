@@ -44,7 +44,7 @@ if ($regions === false) {
     die("Database error fetching regions.");
 }
 
-/*    HANDLE UPDATE POSITION */
+/* HANDLE UPDATE POSITION */
 if (isset($_POST['update_position'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_message = "Invalid CSRF token. Please try again.";
@@ -54,11 +54,11 @@ if (isset($_POST['update_position'])) {
         $start = $_POST['start_date'] ?? '';
         $end = $_POST['end_date'] ?? '';
 
-        /*NEW: Handle scope and region changes */
+        /*Handle scope and region changes */
         $scope = $_POST['scope'] ?? 'global';
         $new_region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
 
-        // FIX 1: Validate dates when editing - prevent past end dates
+        //Validate dates when editing - prevent past end dates
         $today = date('Y-m-d');
 
         // For editing, we allow the start date to be in the past if it already was
@@ -70,7 +70,7 @@ if (isset($_POST['update_position'])) {
         } elseif ($end < $start) {
             $error_message = "End date must be after or equal to the start date.";
         } else {
-            /* FIX 2: Check for duplicate name (excluding current record)*/
+            /* Check for duplicate name (excluding current record)*/
             $checkDup = mysqli_prepare($conn, 
                 "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) AND id != ? LIMIT 1"
             );
@@ -80,7 +80,6 @@ if (isset($_POST['update_position'])) {
             if (mysqli_num_rows($dupResult) > 0) {
                 $error_message = "A position with this name already exists.";
             } else {
-                /* FIX 3: Use prepared statement for UPDATE with proper NULL handling */
                 if ($new_region_id === null) {
                     $updStmt = mysqli_prepare($conn, 
                         "UPDATE positions SET position_name = ?, description = ?, start_date = ?, end_date = ?, region_id = NULL WHERE id = ?"

@@ -1,17 +1,6 @@
 <?php
-/**
- * LOGIN HANDLER - FIXED VERSION
- * Uses role-specific sessions so different roles can coexist in separate tabs.
- * Rate-limiting data is kept in a generic 'LOGIN_PORTAL' session.
- * After successful auth, the role-specific session is started.
- */
-
 require_once "./config/connection.php";
 require_once "./rbac_helper.php";
-
-/* ============================================
-   STEP 1: Handle rate limiting in LOGIN_PORTAL
-   ============================================ */
 
 // Start LOGIN_PORTAL for rate limiting
 ini_set('session.cookie_path', '/');
@@ -60,7 +49,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $id_number = trim($_POST['id'] ?? '');
         $password   = $_POST['password'] ?? '';
 
-        /* Use prepared statement to prevent SQL injection */
+        
         $stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE id_number = ? LIMIT 1");
         mysqli_stmt_bind_param($stmt, "s", $id_number);
         mysqli_stmt_execute($stmt);
@@ -101,9 +90,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
 
-                /* ============================================
-                   FIX: Start the role-specific session properly
-                   ============================================ */
+                /* Start the role-specific session properly */
                 $role = $user['role'];
 
                 // Map role to session name
@@ -115,7 +102,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 ];
                 $sess_name = $session_map[$role] ?? 'VOTER_SESSION';
 
-                // FIX: Properly close LOGIN_PORTAL session before switching
+                // Properly close LOGIN_PORTAL session before switching
                 $_SESSION = array();
                 session_destroy();
 
@@ -138,7 +125,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 if ($password_changed == 0) {
                     $status = "first_login";
-                    // FIX: Always include role parameter for reliable session detection
                     $redirect_url = "change_password.php?role=" . urlencode($role);
                 } else {
                     $status = "success";

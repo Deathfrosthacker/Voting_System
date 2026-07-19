@@ -10,7 +10,7 @@ require_auth(['admin']);
 
 $user_id = $_SESSION['user_id'];
 
-/* ==================== HANDLE ADD OFFICIAL ==================== */
+/* HANDLE ADD OFFICIAL */
 if (isset($_POST['add_official'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: manage_officials.php?status=csrf_error");
@@ -93,7 +93,7 @@ if (isset($_POST['add_official'])) {
     }
 }
 
-/* ==================== HANDLE TOGGLE STATUS ==================== */
+/*  HANDLE TOGGLE STATUS */
 if (isset($_POST['toggle_status'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: manage_officials.php?status=csrf_error");
@@ -128,7 +128,7 @@ if (isset($_POST['toggle_status'])) {
     }
 }
 
-/* ==================== FETCH ALL OFFICIALS ==================== */
+/* FETCH ALL OFFICIALS */
 $officials = mysqli_query($conn, "
     SELECT o.id, o.user_id, o.role, o.status, o.created_at, o.added_by,
            u.id_number, u.name, u.email,
@@ -139,7 +139,7 @@ $officials = mysqli_query($conn, "
     ORDER BY o.created_at DESC
 ");
 
-/* ==================== FETCH STATS ==================== */
+/* FETCH STATS*/
 $statsQuery = mysqli_query($conn, "
     SELECT 
         COUNT(*) as total,

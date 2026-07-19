@@ -17,7 +17,7 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/*    HANDLE ADD ADMIN */
+/* HANDLE ADD ADMIN */
 if (isset($_POST['add_admin'])) {
 
     // ADDED: CSRF validation
@@ -28,8 +28,6 @@ if (isset($_POST['add_admin'])) {
     $role = 'admin';
     $password = $_POST['password'];
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
-    /* FIX: Check for duplicate id_number and email before inserting */
 
     // Check duplicate id_number
     $checkId = mysqli_prepare($conn, "SELECT id FROM users WHERE id_number = ? LIMIT 1");
@@ -52,7 +50,6 @@ if (isset($_POST['add_admin'])) {
         exit();
     }
 
-    /* FIX 1: Added missing mysqli_stmt_bind_param before executing the prepared statement */
     mysqli_stmt_bind_param($checkId, "s", $id_number);
     mysqli_stmt_execute($checkId);
     $idResult = mysqli_stmt_get_result($checkId);
@@ -77,7 +74,6 @@ if (isset($_POST['add_admin'])) {
         exit();
     }
 
-    /* FIX: Use prepared statement for INSERT */
     $stmt = mysqli_prepare($conn, 
         "INSERT INTO users (id_number, name, email, password, role) VALUES (?, ?, ?, ?, ?)"
     );

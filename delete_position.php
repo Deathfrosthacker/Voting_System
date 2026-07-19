@@ -45,7 +45,7 @@ if (mysqli_num_rows($result) == 0) {
 $position = mysqli_fetch_assoc($result);
 $position_name = $position['position_name'];
 
-/*FIX: Cascade delete - remove related candidates and votes first */
+/*Cascade delete - remove related candidates and votes first */
 
 // 1. Delete votes for candidates of this position
 $delVotes = mysqli_prepare($conn, 

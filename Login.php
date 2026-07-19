@@ -81,7 +81,7 @@
 
         <form action="logindb.php" method="POST">
             <?php 
-            /* FIX: Start session BEFORE requiring csrf_helper so token is generated properly */
+            /* Start session BEFORE requiring csrf_helper so token is generated properly */
             if (session_status() === PHP_SESSION_NONE) {
                 ini_set('session.cookie_path', '/');
                 session_name('LOGIN_PORTAL');

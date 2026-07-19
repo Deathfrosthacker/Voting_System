@@ -11,7 +11,7 @@ require_auth(['admin', 'election_officer']);
 $user_id = $_SESSION['user_id'];
 $current_role = $_SESSION['role'];
 
-/* ==================== HANDLE REGISTER VOTER ==================== */
+/* HANDLE REGISTER VOTER*/
 if (isset($_POST['register_voter'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: register_voter.php?status=csrf_error");
@@ -48,7 +48,7 @@ if (isset($_POST['register_voter'])) {
         exit();
     }
 
-    /* FIX: Validate age (must be 18+) */
+    /* Validate age (must be 18+) */
     try {
         $dob = new DateTime($date_of_birth);
         $today = new DateTime();
@@ -109,7 +109,7 @@ if (isset($_POST['register_voter'])) {
     }
 }
 
-/* ==================== FETCH STATS ==================== */
+/* FETCH STATS */
 $statsQuery = mysqli_query($conn, "
     SELECT 
         COUNT(*) as total_voters,
@@ -120,7 +120,7 @@ $statsQuery = mysqli_query($conn, "
 ");
 $stats = mysqli_fetch_assoc($statsQuery);
 
-/* ==================== FETCH RECENT VOTERS ==================== */
+/*  FETCH RECENT VOTERS */
 $recentVoters = mysqli_query($conn, "
     SELECT u.*, r.name as region_name
     FROM users u
@@ -130,7 +130,7 @@ $recentVoters = mysqli_query($conn, "
     LIMIT 10
 ");
 
-/* ==================== FETCH REGIONS ==================== */
+/* FETCH REGIONS */
 $regions = mysqli_query($conn, "SELECT id, name FROM regions ORDER BY name ASC");
 if ($regions === false) {
     die("Database error fetching regions.");

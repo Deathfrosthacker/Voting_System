@@ -1,5 +1,4 @@
 <?php
-// FIX: Don't call session_start here - rbac_helper.php handles it
 require_once "./rbac_helper.php";
 
 start_role_session();

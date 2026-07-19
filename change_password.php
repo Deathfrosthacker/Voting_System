@@ -1,14 +1,4 @@
 <?php
-/**
- * CHANGE PASSWORD - FIXED VERSION
- * Security fixes:
- * 1. Session timeout and role check
- * 2. Regenerate session ID on password change
- * 3. Proper redirect after change
- * 4. FIXED: Session detection now uses role hint from URL first, preventing
- *    admin session from being picked when user is a different role
- */
-
 ini_set('session.cookie_path', '/');
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_only_cookies', '1');
@@ -22,11 +12,6 @@ $session_map = [
     'voter'            => 'VOTER_SESSION'
 ];
 
-// ============================================================
-// FIX: Use role hint from URL as PRIMARY session selector.
-// When login redirects here with ?role=election_officer, we
-// MUST use OFFICER_SESSION, not whatever cookie happens to exist.
-// ============================================================
 $role_hint = $_GET['role'] ?? null;
 $session_started = false;
 
@@ -66,7 +51,7 @@ require_once "./rbac_helper.php";
 check_session_timeout();
 require_auth();
 
-// FIX: Ensure we have valid session data before proceeding
+// Ensure we have valid session data before proceeding
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || !isset($_SESSION['id_number'])) {
     session_unset();
     session_destroy();
@@ -78,7 +63,7 @@ $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
 $id_number = $_SESSION['id_number'];
 
-/* ==================== FETCH USER DATA WITH VALIDATION ==================== */
+/* FETCH USER DATA WITH VALIDATION  */
 $stmt = mysqli_prepare($conn, "SELECT id, name, id_number, password_changed, role FROM users WHERE id = ? LIMIT 1");
 mysqli_stmt_bind_param($stmt, "i", $user_id);
 mysqli_stmt_execute($stmt);
@@ -86,7 +71,6 @@ $userResult = mysqli_stmt_get_result($stmt);
 $user = mysqli_fetch_assoc($userResult);
 
 // Verify the session user matches the database user
-// FIX: Use loose type comparison to handle string/int differences from DB
 if (!$user || (int)$user['id'] !== (int)$user_id || $user['role'] !== $role || $user['id_number'] !== $id_number) {
     // Session data doesn't match database - possible tampering or corruption
     session_unset();
@@ -95,7 +79,6 @@ if (!$user || (int)$user['id'] !== (int)$user_id || $user['role'] !== $role || $
     exit();
 }
 
-/* Pre-define redirect URL for cancel button and success redirect */
 $redirect_url = match($role) {
     'admin' => 'admin_dashboard.php',
     'election_officer' => 'election_officer_dashboard.php',
@@ -112,7 +95,7 @@ if ($user['password_changed'] == 1 && !$is_optional) {
     exit();
 }
 
-/* ==================== HANDLE PASSWORD CHANGE ==================== */
+/* HANDLE PASSWORD CHANGE */
 if (isset($_POST['change_password'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_message = "Invalid security token. Please refresh and try again.";

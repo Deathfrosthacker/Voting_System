@@ -1,13 +1,4 @@
 <?php
-/**
- * Sidebar Navigation Component
- * Displays navigation menu based on user's RBAC role
- * Roles: admin, election_officer, observer, voter
- * 
- * NOTE: This file should be included AFTER session_start() and rbac_helper.php
- * have already been loaded by the parent page.
- */
-
 $current_role = $_SESSION['role'] ?? '';
 $current_page = basename($_SERVER['PHP_SELF']);
 

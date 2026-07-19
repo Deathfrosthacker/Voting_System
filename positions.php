@@ -17,7 +17,7 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-/*    HANDLE ADD POSITION */
+/*HANDLE ADD POSITION */
 if (isset($_POST['add_position'])) {
 
     //ADDED: CSRF validation
@@ -35,7 +35,7 @@ if (isset($_POST['add_position'])) {
     $scope = $_POST['scope'] ?? 'global';
     $region_id = ($scope === 'regional' && !empty($_POST['region_id'])) ? (int)$_POST['region_id'] : null;
 
-    // FIX 1: Validate dates - prevent past dates
+    // Validate dates - prevent past dates
     $today = date('Y-m-d');
 
     if ($start < $today) {
@@ -53,7 +53,7 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    /* FIX 2: Check for duplicate position name (case-insensitive) */
+    /* Check for duplicate position name (case-insensitive) */
     $checkDup = mysqli_prepare($conn, "SELECT id FROM positions WHERE LOWER(position_name) = LOWER(?) LIMIT 1");
     mysqli_stmt_bind_param($checkDup, "s", $name);
     mysqli_stmt_execute($checkDup);
@@ -63,7 +63,6 @@ if (isset($_POST['add_position'])) {
         exit();
     }
 
-    /* FIX 3: Use prepared statement for INSERT with proper NULL handling */
     if ($region_id === null) {
         $stmt = mysqli_prepare($conn, 
             "INSERT INTO positions (position_name, description, start_date, end_date, region_id) VALUES (?, ?, ?, ?, NULL)"

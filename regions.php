@@ -8,7 +8,7 @@ require_once "./rbac_helper.php";
 check_session_timeout();
 require_auth(['admin', 'election_officer']);
 
-/*    HANDLE ADD REGION */
+/*HANDLE ADD REGION */
 if (isset($_POST['add_region'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: regions.php?status=csrf_error");
@@ -18,7 +18,6 @@ if (isset($_POST['add_region'])) {
     $name = trim($_POST['region_name'] ?? '');
     $description = trim($_POST['description'] ?? '');
 
-    /* FIX: Use prepared statement to prevent SQL injection */
     $check = mysqli_prepare($conn, "SELECT id FROM regions WHERE name = ?");
     mysqli_stmt_bind_param($check, "s", $name);
     mysqli_stmt_execute($check);
@@ -37,7 +36,6 @@ if (isset($_POST['add_region'])) {
         $user_id = $_SESSION['user_id'];
         $activity = "Added Region: " . $name;
         
-        /* FIX: Use prepared statement for log insert */
         $logStmt = mysqli_prepare($conn, "INSERT INTO logs (user_id, activity, log_time) VALUES (?, ?, NOW())");
         mysqli_stmt_bind_param($logStmt, "is", $user_id, $activity);
         mysqli_stmt_execute($logStmt);
@@ -57,10 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_region'])) {
         exit();
     }
 
-    /* FIX: Cast to integer instead of escaping */
     $region_id = (int)$_POST['region_id'];
 
-    /* FIX: Use prepared statements for checks */
+    
     $voterStmt = mysqli_prepare($conn, "SELECT COUNT(*) as total FROM users WHERE region_id = ?");
     mysqli_stmt_bind_param($voterStmt, "i", $region_id);
     mysqli_stmt_execute($voterStmt);
@@ -78,14 +75,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_region'])) {
         exit();
     }
 
-    /* FIX: Use prepared statement to get name */
     $nameStmt = mysqli_prepare($conn, "SELECT name FROM regions WHERE id = ?");
     mysqli_stmt_bind_param($nameStmt, "i", $region_id);
     mysqli_stmt_execute($nameStmt);
     $nameResult = mysqli_stmt_get_result($nameStmt);
     $regionName = mysqli_fetch_assoc($nameResult)['name'] ?? '';
 
-    /* FIX: Use prepared statement for DELETE */
     $delStmt = mysqli_prepare($conn, "DELETE FROM regions WHERE id = ?");
     mysqli_stmt_bind_param($delStmt, "i", $region_id);
     

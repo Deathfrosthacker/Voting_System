@@ -1,9 +1,4 @@
 <?php
-/**
- * LOGOUT - FIXED VERSION
- * Clears ALL role-specific sessions to ensure complete logout.
- */
-
 ini_set('session.cookie_path', '/');
 require_once "./config/connection.php";
 

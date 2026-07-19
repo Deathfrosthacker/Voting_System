@@ -1,25 +1,6 @@
 <?php
-/**
- * RBAC (Role-Based Access Control) Helper
- * Manages roles, permissions, and access control for the voting system
- * 
- * Roles:
- * - admin: Full system control
- * - election_officer: Manages elections, candidates, voters
- * - observer: Read-only access to logs and results
- * - voter: Can only cast votes
- */
-
 require_once __DIR__ . "/config/connection.php";
 
-/**
- * Start session respecting any previously set session_name()
- * This allows role-specific sessions to work correctly across tabs.
- * 
- * CRITICAL FIX: When multiple role sessions exist in cookies, we need to
- * check which one is being requested by the current page context.
- * Now supports $_GET['role'] as a hint for multi-session scenarios.
- */
 function start_role_session(): void {
     // If session already active, don't restart
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -43,11 +24,7 @@ function start_role_session(): void {
         'VOTER_SESSION'    => 'voter'
     ];
 
-    // ============================================================
-    // FIX: Check for role hint from URL first (e.g., ?role=election_officer)
-    // This prevents the wrong session from being selected when
-    // multiple role cookies exist in the browser.
-    // ============================================================
+
     $role_hint = $_GET['role'] ?? null;
     if ($role_hint && in_array($role_hint, $role_sessions)) {
         $target_sess = array_search($role_hint, $role_sessions);
@@ -135,9 +112,7 @@ function start_role_session(): void {
     session_start();
 }
 
-/**
- * Check if current user has a specific permission
- */
+/*Check if current user has a specific permission */
 function has_permission(string $permission_code): bool {
     global $conn;
 
@@ -279,9 +254,7 @@ function require_observer(): void {
     }
 }
 
-/**
- * Universal session timeout check (30 minutes)
- */
+/*Universal session timeout check (30 minutes)*/
 function check_session_timeout(string $redirect_url = "login.php?timeout=1"): void {
     start_role_session();
 
@@ -305,10 +278,8 @@ function check_session_timeout(string $redirect_url = "login.php?timeout=1"): vo
     $_SESSION['last_activity'] = time();
 }
 
-/**
- * Universal authentication check
- * Ensures user is logged in with a valid role
- */
+/*Universal authentication check*/
+/* Ensures user is logged in with a valid role */
 function require_auth(array $allowed_roles = [], string $redirect_url = "login.php"): void {
     start_role_session();
 

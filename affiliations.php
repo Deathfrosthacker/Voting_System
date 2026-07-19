@@ -8,14 +8,13 @@ require_once "./rbac_helper.php";
 check_session_timeout();
 require_auth(['admin', 'election_officer']);
 
-/*    HANDLE ADD AFFILIATION */
+/*HANDLE ADD AFFILIATION */
 if (isset($_POST['add_affiliation'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: affiliations.php?status=csrf_error");
         exit();
     }
 
-    /* FIX 1: Changed $$name to $name - was creating a variable variable instead of setting $name */
     $name = trim($_POST['affiliation_name']);
     if (!preg_match("/^[a-zA-Z0-9\s&.,'-]{3,100}$/", $name)) {
         header("Location: affiliations.php?status=invalid_name");
@@ -74,7 +73,7 @@ if (!mysqli_stmt_execute($stmt)) {
 mysqli_stmt_close($stmt);
 }
 
-/*    HANDLE DELETE AFFILIATION */
+/* HANDLE DELETE AFFILIATION */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_affiliation'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: affiliations.php?status=csrf_error");

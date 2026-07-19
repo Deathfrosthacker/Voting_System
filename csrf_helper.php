@@ -1,17 +1,4 @@
 <?php
-/*    CSRF PROTECTION HELPERS
-      Security enhancements:
-   - Tokens are stored per-session with time-based expiration
-   - validate_csrf_token() returns false if token is missing/expired
-   - Token rotation after successful validation (one-time use pattern)
-   - Time-based token expiry (2 hours)
-   - FIXED: Now respects existing role-specific sessions
-*/
-
-/*
-  Generate a new CSRF token for the current session.
-  Creates a token with embedded timestamp for expiry checking.
- */
 function generate_csrf_token(): string {
     // FIX: Only start session if not already active - don't interfere with role-specific sessions
     if (session_status() === PHP_SESSION_NONE) {
@@ -25,15 +12,8 @@ function generate_csrf_token(): string {
     return $_SESSION['csrf_token'];
 }
 
-/*
-  Validate a CSRF token.
-  Checks: existence, non-emptiness, hash equality, and time expiry.
-
- @param string $token The token submitted with the form
- * @return bool True if valid, false otherwise
- */
 function validate_csrf_token(string $token): bool {
-    // FIX: Only start session if not already active
+    // Only start session if not already active
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
@@ -55,7 +35,7 @@ function validate_csrf_token(string $token): bool {
     // Constant-time comparison to prevent timing attacks
     $valid = hash_equals($_SESSION['csrf_token'], $token);
 
-    // Rotate token after successful validation (one-time use pattern)
+    // Rotate token after successful validation 
     // This prevents replay attacks
     if ($valid) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -65,11 +45,6 @@ function validate_csrf_token(string $token): bool {
     return $valid;
 }
 
-/**
- * Generate a hidden input field with the CSRF token.
- * 
- * @return string HTML input element
- */
 function csrf_input_field(): string {
     $token = generate_csrf_token();
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars($token, ENT_QUOTES) . '">';

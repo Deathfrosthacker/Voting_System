@@ -23,7 +23,7 @@ require_auth(['voter']);
 
 $user_id = $_SESSION['user_id'];
 
-/*FIX: Use prepared statement for fetching voter's region */
+/*fetching voter's region */
 $stmt = mysqli_prepare($conn, "SELECT region_id FROM users WHERE id = ? LIMIT 1");
 mysqli_stmt_bind_param($stmt, "i", $user_id);
 mysqli_stmt_execute($stmt);

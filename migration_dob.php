@@ -18,7 +18,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $status = "password_mismatch";
     } else {
 
-        /* FIX 1: Validate date format and catch DateTime exceptions */
+        /* Validating date format and catch DateTime exceptions */
         try {
             $dob = new DateTime($date_of_birth);
             $today = new DateTime();
@@ -61,7 +61,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             // Hash password
                             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-                            /* FIX 2: Use prepared statement for INSERT (prevents SQL injection)*/
                             $stmt = mysqli_prepare($conn, 
                                 "INSERT INTO users (id_number, name, email, date_of_birth, county, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)"
                             );

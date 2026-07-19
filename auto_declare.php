@@ -44,19 +44,14 @@ if ($expired === false) {
     exit();
 }
 
-/*    PROCESS EACH EXPIRED */
+/* PROCESS EACH EXPIRED */
 while ($pos = mysqli_fetch_assoc($expired)) {
 
     $pos_id   = (int)$pos['id'];
     $pos_name = $pos['position_name'];
     $end_date = $pos['end_date'];
 
-    /* FIX 1: Safer GROUP BY -- include c.name to comply with
-       ONLY_FULL_GROUP_BY mode (enabled by default in MySQL 5.7+).
-       FIX 2: Use COUNT(v.candidate_id) instead of COUNT(v.id) since
-       candidate_id is the known join column and always exists.
-       */
-    $winnerStmt = mysqli_prepare($conn, "
+        $winnerStmt = mysqli_prepare($conn, "
         SELECT c.id, c.name, COUNT(v.candidate_id) AS vote_count
         FROM candidates c
         LEFT JOIN votes v ON c.id = v.candidate_id
@@ -66,8 +61,7 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         LIMIT 1
     ");
 
-    /* FIX 3: Check if prepared statement was created successfully */
-    if ($winnerStmt === false) {
+        if ($winnerStmt === false) {
         ad_log_error("Failed to prepare winner query for position '$pos_name': " . mysqli_error($conn));
         continue; // Skip this position, try the next one
     }
@@ -80,12 +74,10 @@ while ($pos = mysqli_fetch_assoc($expired)) {
         $winner_name = $winner['name'];
         $vote_count  = (int)$winner['vote_count'];
 
-        /* FIX 4: Wrap save + cleanup in a transaction so partial failures don't leave the database in an inconsistent state.
-           */
         mysqli_begin_transaction($conn);
         $txSuccess = true;
 
-        /* Save result using prepared statement */
+        /* Save result */
         $saveStmt = mysqli_prepare($conn,
             "INSERT INTO election_results (position_name, winner_name, total_votes, end_date) VALUES (?, ?, ?, ?)"
         );
