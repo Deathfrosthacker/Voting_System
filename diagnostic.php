@@ -1,5 +1,4 @@
 <?php
-// Session is started by check_session_timeout() in rbac_helper.php
 require_once "./config/connection.php";
 require_once "./rbac_helper.php";
 
@@ -19,7 +18,7 @@ echo "<style>
     .warning { color: #ea580c; font-weight: bold; }
 </style>";
 
-// 1. Check votes table structure
+// Check votes table structure
 echo "<div class='section'>";
 echo "<h3>1. Votes Table Structure</h3>";
 $votesStructure = mysqli_query($conn, "DESCRIBE votes");
@@ -43,7 +42,7 @@ if ($votesStructure) {
 }
 echo "</div>";
 
-// 2. Check for unique constraints
+// Check for unique constraints
 echo "<div class='section'>";
 echo "<h3>2. Votes Table Indexes/Constraints</h3>";
 $indexes = mysqli_query($conn, "SHOW INDEXES FROM votes");
@@ -66,7 +65,7 @@ if ($indexes) {
 }
 echo "</div>";
 
-// 3. Check candidates table structure
+// Check candidates table structure
 echo "<div class='section'>";
 echo "<h3>3. Candidates Table Structure</h3>";
 $candidatesStructure = mysqli_query($conn, "DESCRIBE candidates");
@@ -90,7 +89,7 @@ if ($candidatesStructure) {
 }
 echo "</div>";
 
-// 4. Sample data check
+//Sample data check
 echo "<div class='section'>";
 echo "<h3>4. Sample Data Check</h3>";
 
@@ -134,7 +133,7 @@ if (mysqli_num_rows($recentVotes) > 0) {
 }
 echo "</div>";
 
-// 5. Check for orphaned votes
+// Check for orphaned votes
 echo "<div class='section'>";
 echo "<h3>5. Data Integrity Check</h3>";
 
@@ -163,7 +162,6 @@ if ($orphanCount > 0) {
 }
 echo "</div>";
 
-// 6. Recommendations
 echo "<div class='section'>";
 echo "<h3>6. Recommendations</h3>";
 echo "<ul>";

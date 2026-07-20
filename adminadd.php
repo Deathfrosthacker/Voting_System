@@ -1,10 +1,8 @@
 <?php
-// Session is started by check_session_timeout() in rbac_helper.php
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 require_once "./rbac_helper.php";
 
-// RBAC: Only admin can add other admins
 check_session_timeout();
 require_auth(['admin']);
 

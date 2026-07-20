@@ -6,7 +6,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name  = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $date_of_birth = $_POST['date_of_birth'] ?? '';
-    /* FIX: Use region_id from the form instead of county (which doesn't exist in form) */
     $region_id = !empty($_POST['region_id']) ? (int)$_POST['region_id'] : null;
     $password = $_POST['password'] ?? '';
     $confirm_password = $_POST['confirm_password'];
@@ -62,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             // Hash password
                             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-                            /* Self-registered users set password_changed = 1 (they chose their own password) */
+                            /* Self-registered users set password (they chose their own password) */
                             $stmt = mysqli_prepare($conn, 
                                 "INSERT INTO users (id_number, name, email, date_of_birth, region_id, password, role, password_changed) VALUES (?, ?, ?, ?, ?, ?, ?, 1)"
                             );

@@ -1,6 +1,6 @@
 <?php
 function generate_csrf_token(): string {
-    // FIX: Only start session if not already active - don't interfere with role-specific sessions
+    // start session if not already active - don't interfere with role-specific sessions
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
@@ -24,7 +24,7 @@ function validate_csrf_token(string $token): bool {
     }
 
     // Check token hasn't expired (2 hours)
-    $maxAge = 7200; // 2 hours in seconds
+    $maxAge = 7200; 
     if (!empty($_SESSION['csrf_token_time']) && (time() - $_SESSION['csrf_token_time'] > $maxAge)) {
         // Token expired - clear it
         unset($_SESSION['csrf_token']);

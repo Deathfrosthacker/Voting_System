@@ -1,5 +1,4 @@
 <?php
-// MUST be first - set the correct session name before rbac_helper starts it
 ini_set('session.cookie_path', '/');
 session_name('OBSERVER_SESSION');
 session_start();

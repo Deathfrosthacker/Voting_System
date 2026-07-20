@@ -1,9 +1,6 @@
 <?php
-
-// Do not auto-start a session here; calling pages must manage role-specific session handling.
 require_once "./config/connection.php";
 
-/* Helper: log errors both to error_log and to a session flash for visibility */
 function ad_log_error(string $msg): void {
     $full = "auto_declare: " . $msg;
     error_log($full);
@@ -13,7 +10,7 @@ function ad_log_error(string $msg): void {
     }
 }
 
-/*    CREATE RESULTS TABLE */
+/*CREATE RESULTS TABLE */
 $createTable = "CREATE TABLE IF NOT EXISTS election_results (
     id INT AUTO_INCREMENT PRIMARY KEY,
     position_name VARCHAR(255) NOT NULL,
@@ -159,7 +156,6 @@ while ($pos = mysqli_fetch_assoc($expired)) {
             mysqli_rollback($conn);
         }
     } else {
-        /* No candidates/votes found for this expired position -- still clean it up */
         ad_log_error("No winner could be determined for expired position '$pos_name' (no candidates or votes).");
 
         mysqli_begin_transaction($conn);

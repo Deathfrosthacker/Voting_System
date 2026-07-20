@@ -1,5 +1,4 @@
 <?php
-// Session is started by check_session_timeout() in rbac_helper.php
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 require_once "./rbac_helper.php";
@@ -93,7 +92,7 @@ if (isset($_POST['add_official'])) {
     }
 }
 
-/*  HANDLE TOGGLE STATUS */
+/* HANDLE TOGGLE STATUS */
 if (isset($_POST['toggle_status'])) {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         header("Location: manage_officials.php?status=csrf_error");

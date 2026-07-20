@@ -1,10 +1,9 @@
 <?php
-// Session is started by check_session_timeout() in rbac_helper.php
 require_once "./config/connection.php";
 require_once "./csrf_helper.php";
 require_once "./rbac_helper.php";
 
-/* RBAC: Only admin and election_officer can delete positions */
+/*RBAC: Only admin and election_officer can delete positions */
 check_session_timeout();
 require_auth(['admin', 'election_officer']);
 
@@ -17,13 +16,13 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 }
 $_SESSION['last_activity'] = time();
 
-// CHANGED: Accept POST only, reject GET requests
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id']) || empty($_POST['id'])) {
     header("Location: positions.php?status=error");
     exit();
 }
 
-// ADDED: CSRF validation for deletion
+// CSRF validation for deletion
 if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
     header("Location: positions.php?status=csrf_error");
     exit();
@@ -45,9 +44,7 @@ if (mysqli_num_rows($result) == 0) {
 $position = mysqli_fetch_assoc($result);
 $position_name = $position['position_name'];
 
-/*Cascade delete - remove related candidates and votes first */
-
-// 1. Delete votes for candidates of this position
+//  Delete votes for candidates of this position
 $delVotes = mysqli_prepare($conn, 
     "DELETE v FROM votes v 
      JOIN candidates c ON v.candidate_id = c.id 
@@ -58,14 +55,14 @@ if ($delVotes) {
     mysqli_stmt_execute($delVotes);
 }
 
-// 2. Delete candidates for this position
+//  Delete candidates for this position
 $delCandidates = mysqli_prepare($conn, "DELETE FROM candidates WHERE position = ?");
 if ($delCandidates) {
     mysqli_stmt_bind_param($delCandidates, "s", $position_name);
     mysqli_stmt_execute($delCandidates);
 }
 
-// 3. Delete the position
+//  Delete the position
 $delPos = mysqli_prepare($conn, "DELETE FROM positions WHERE id = ?");
 mysqli_stmt_bind_param($delPos, "i", $position_id);
 
